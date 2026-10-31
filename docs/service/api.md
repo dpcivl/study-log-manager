@@ -45,3 +45,56 @@ HTML 페이지는 뼈대만 내려주고, 데이터는 페이지의 JS가 위 AP
 
 ### F5 POST /api/logout
 성공: 204, `Set-Cookie: session=; Max-Age=0`
+
+## F1 학습 주제 관리
+
+| 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
+|---|---|---|---|---|---|
+| F1 | GET | /api/subjects | 없음 | 200 `{items:[Subject+계산필드]}` 생성 최신순 | 401 |
+| F1 | POST | /api/subjects | `{name, background?, started_on, target_date?}` | 201 Subject+계산필드 | 422 validation_error |
+| F1 | GET | /api/subjects/{id} | 없음 | 200 Subject+계산필드 | 404 not_found |
+| F1 | PATCH | /api/subjects/{id} | `{name?, background?, started_on?, target_date?}` 보낸 필드만 수정 | 200 Subject+계산필드 | 404 / 422 |
+
+### F1 GET /api/subjects
+```json
+{
+  "items": [
+    {
+      "id": 1,
+      "name": "빅데이터분석기사 실기",
+      "background": "임베디드 HW 개발 1년 / SW 개발 2년 5개월 / 정보처리산업기사 / AI 엔지니어 1개월째",
+      "started_on": "2026-10-26",
+      "target_date": null,
+      "created_at": "2026-10-26T09:00:00Z",
+      "updated_at": "2026-10-26T09:00:00Z",
+      "total_minutes": 360,
+      "last7_minutes": 360,
+      "days_studied": 4,
+      "note_count": 5,
+      "open_note_count": 1
+    }
+  ]
+}
+```
+
+### F1 POST /api/subjects
+요청
+```json
+{ "name": "빅데이터분석기사 실기", "background": "임베디드 HW 1년...", "started_on": "2026-10-26", "target_date": null }
+```
+성공 201: 위 items 원소와 같은 모양(계산 필드는 모두 0)
+
+오류 422
+```json
+{ "error": { "code": "validation_error", "message": "입력값을 확인하세요", "fields": { "name": "이름은 1~100자여야 합니다" } } }
+```
+
+### F1 GET /api/subjects/{id}, PATCH /api/subjects/{id}
+PATCH 요청 예
+```json
+{ "target_date": "2026-12-06" }
+```
+성공 200: items 원소와 같은 모양. 오류 404
+```json
+{ "error": { "code": "not_found", "message": "주제를 찾을 수 없습니다" } }
+```

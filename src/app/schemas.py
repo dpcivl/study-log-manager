@@ -1,9 +1,10 @@
 """Pydantic 요청·응답 모델. design.md 4절 제한값과 5절 응답 모양을 그대로 옮겼다."""
 
+import re
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_serializer
+from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
 NoteKind = Literal["remember", "debug", "review"]
 
@@ -23,18 +24,44 @@ class LoginRequest(BaseModel):
 
 
 # ---- F1 Subject ----
+def _not_blank(value: str) -> str:
+    """공백만 있는 이름은 비어 있는 것으로 본다. 통과한 값은 받은 그대로 저장한다."""
+    if not value.strip():
+        raise ValueError("이름이 비어 있습니다")
+    return value
+
+
+_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+
+def _iso_date_only(value: object) -> object:
+    """날짜는 "YYYY-MM-DD" 문자열만 받는다(숫자 타임스탬프, 날짜+시각 문자열은 거부)."""
+    if value is None or (isinstance(value, str) and _ISO_DATE.fullmatch(value)):
+        return value
+    raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다")
+
+
 class SubjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     background: str = Field(default="", max_length=5000)
     started_on: date
     target_date: date | None = None
 
+    _check_name = field_validator("name")(_not_blank)
+    _check_dates = field_validator("started_on", "target_date", mode="before")(_iso_date_only)
+
 
 class SubjectUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=100)
-    background: str | None = Field(default=None, max_length=5000)
-    started_on: date | None = None
+    # 보낸 필드만 수정한다(exclude_unset). name·background·started_on은 null을 허용하지 않아
+    # 기본값을 None으로 두되 타입은 non-null로 선언한다(null을 보내면 422, 생략하면 변경 없음).
+    # target_date는 null을 보내면 목표일을 지운다.
+    name: str = Field(default=None, min_length=1, max_length=100)
+    background: str = Field(default=None, max_length=5000)
+    started_on: date = Field(default=None)
     target_date: date | None = None
+
+    _check_name = field_validator("name")(_not_blank)
+    _check_dates = field_validator("started_on", "target_date", mode="before")(_iso_date_only)
 
 
 class SubjectOut(_OutModel):

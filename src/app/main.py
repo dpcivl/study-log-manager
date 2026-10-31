@@ -10,9 +10,9 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401  (테이블 등록)
-from app.auth import LoginRateLimiter
+from app.auth import LoginRateLimiter, is_logged_in
 from app.db import Base, make_engine, make_session_factory
-from app.errors import APIError
+from app.errors import NOT_FOUND_MESSAGES, APIError, validation_fields
 from app.routers import auth, export, notes, pages, sessions, subjects
 from app.settings import Settings, get_settings
 
@@ -73,12 +73,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def validation_error_handler(
         request: Request, exc: RequestValidationError
     ) -> JSONResponse:
-        # 422 validation_error. fields는 {필드명: 문구}. 문구는 각 기능에서 맞춘다.
-        fields: dict[str, str] = {}
-        for err in exc.errors():
-            loc = [str(p) for p in err.get("loc", ()) if p not in ("body", "query", "path")]
-            fields[".".join(loc) or "body"] = err.get("msg", "입력값을 확인하세요")
-        return _error_response(422, "validation_error", "입력값을 확인하세요", fields=fields)
+        errors = exc.errors()
+        # 본문 파싱 오류는 의존성(로그인 검사)보다 먼저 나므로 여기서 401을 먼저 가려낸다.
+        path = request.url.path
+        if (
+            path.startswith("/api/")
+            and path not in ("/api/login", "/api/logout")
+            and not is_logged_in(request)
+        ):
+            return _error_response(401, "unauthorized", "로그인이 필요합니다")
+        # 경로의 id가 정수가 아니거나 범위 밖이면 없는 자원이다(404).
+        for err in errors:
+            loc = err.get("loc", ())
+            if loc and loc[0] == "path" and loc[-1] in NOT_FOUND_MESSAGES:
+                return _error_response(404, "not_found", NOT_FOUND_MESSAGES[loc[-1]])
+        return _error_response(
+            422, "validation_error", "입력값을 확인하세요", fields=validation_fields(errors)
+        )
 
     @app.exception_handler(StarletteHTTPException)
     async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:

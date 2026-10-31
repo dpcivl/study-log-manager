@@ -1,6 +1,49 @@
 {% extends "base.html" %}
+{% block title %}Study Log{% endblock %}
 {% block content %}
-<!-- S3 주제 상세. mockup/index.html의 S3 부분을 옮긴다. -->
-<section id="s3" data-subject-id="{{ subject_id }}"></section>
+<!-- S3 -->
+<section id="s3" aria-labelledby="s3-title" data-subject-id="{{ subject_id }}">
+  <header class="topbar">
+    <a class="back-link" href="/">← 주제 목록</a>
+    <h1 id="s3-title" class="topbar-title"></h1>
+    <div class="topbar-actions">
+      <button id="subject-edit-btn" class="btn btn-secondary" type="button" hidden>편집</button>
+    </div>
+  </header>
+  <div class="page">
+    <p id="subject-load-error" class="form-error" role="alert" hidden></p>
+    <form id="subject-edit-form" class="topic-form" hidden novalidate>
+      <div class="field"><!-- F1 -->
+        <label for="edit-name">이름</label>
+        <input id="edit-name" class="input" type="text" name="name" maxlength="100" aria-describedby="edit-name-error">
+        <p id="edit-name-error" class="form-error" role="alert" data-error-for="name" hidden></p>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="edit-started">시작일</label>
+          <input id="edit-started" class="input" type="date" name="started_on" aria-describedby="edit-started-error">
+          <p id="edit-started-error" class="form-error" role="alert" data-error-for="started_on" hidden></p>
+        </div>
+        <div class="field">
+          <label for="edit-target">목표일</label>
+          <input id="edit-target" class="input" type="date" name="target_date" aria-describedby="edit-target-error">
+          <p id="edit-target-error" class="form-error" role="alert" data-error-for="target_date" hidden></p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="edit-background">배경</label>
+        <textarea id="edit-background" class="input" name="background" maxlength="5000" aria-describedby="edit-background-error"></textarea>
+        <p id="edit-background-error" class="form-error" role="alert" data-error-for="background" hidden></p>
+      </div>
+      <p id="edit-form-error" class="form-error" role="alert" data-error-for="form" hidden></p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">저장</button>
+        <button id="subject-edit-cancel" class="btn btn-secondary" type="button">취소</button>
+      </div>
+    </form>
+    <p id="subject-summary" class="summary"></p>
+    <p id="subject-background" class="background-text" hidden></p>
+  </div>
+</section>
 {% endblock %}
 {% block scripts %}<script type="module" src="/static/js/subject.js"></script>{% endblock %}

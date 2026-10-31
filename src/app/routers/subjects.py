@@ -1,37 +1,123 @@
 """F1 /api/subjects"""
 
-from fastapi import APIRouter, Depends, status
+from datetime import date, timedelta
+
+from fastapi import APIRouter, Depends, Path, status
+from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import require_session
+from app.clock import today_kst
 from app.db import get_db
-from app.errors import NotImplementedAPIError
+from app.errors import APIError
+from app.models import Note, StudySession, Subject
 from app.schemas import SubjectCreate, SubjectList, SubjectOut, SubjectUpdate
 
 router = APIRouter(prefix="/api/subjects", tags=["F1"], dependencies=[Depends(require_session)])
 
+# SQLite 정수 범위 안으로 제한한다. 범위 밖 id는 없는 자원(404)으로 처리된다.
+SubjectId = Path(ge=1, le=2**63 - 1)
+
+
+def _not_found() -> APIError:
+    return APIError(404, "not_found", "주제를 찾을 수 없습니다")
+
+
+def _stats(db: Session, subject_id: int | None = None) -> dict[int, dict[str, int]]:
+    """주제별 계산 필드를 질의 두 번(공부 기록 집계, 노트 집계)으로 구한다.
+
+    subject_id를 주면 그 주제만, 없으면 모든 주제를 집계한다.
+    last7_minutes는 오늘 포함 7일(KST)이다.
+    """
+    today = today_kst()
+    week_start: date = today - timedelta(days=6)
+
+    session_query = select(
+        StudySession.subject_id,
+        func.sum(StudySession.minutes),
+        func.coalesce(
+            func.sum(
+                case(
+                    (
+                        and_(
+                            StudySession.studied_on >= week_start,
+                            StudySession.studied_on <= today,
+                        ),
+                        StudySession.minutes,
+                    ),
+                    else_=0,
+                )
+            ),
+            0,
+        ),
+        func.count(func.distinct(StudySession.studied_on)),
+    ).group_by(StudySession.subject_id)
+    note_query = select(
+        Note.subject_id,
+        func.count(Note.id),
+        func.coalesce(func.sum(case((Note.is_open.is_(True), 1), else_=0)), 0),
+    ).group_by(Note.subject_id)
+    if subject_id is not None:
+        session_query = session_query.where(StudySession.subject_id == subject_id)
+        note_query = note_query.where(Note.subject_id == subject_id)
+
+    stats: dict[int, dict[str, int]] = {}
+    for sid, total, last7, days in db.execute(session_query):
+        stats.setdefault(sid, {}).update(
+            total_minutes=int(total or 0), last7_minutes=int(last7), days_studied=int(days)
+        )
+    for sid, count, open_count in db.execute(note_query):
+        stats.setdefault(sid, {}).update(note_count=int(count), open_note_count=int(open_count))
+    return stats
+
+
+def _to_out(subject: Subject, stats: dict[int, dict[str, int]]) -> SubjectOut:
+    return SubjectOut.model_validate(subject).model_copy(update=stats.get(subject.id, {}))
+
+
+def _get_or_404(db: Session, subject_id: int) -> Subject:
+    subject = db.get(Subject, subject_id)
+    if subject is None:
+        raise _not_found()
+    return subject
+
 
 @router.get("", response_model=SubjectList)
 def list_subjects(db: Session = Depends(get_db)) -> SubjectList:
-    # 200 {items:[Subject+계산필드]} 생성 최신순
-    raise NotImplementedAPIError()
+    # 200 {items:[Subject+계산필드]} 생성 최신순(같은 시각이면 id가 큰 쪽이 먼저)
+    subjects = db.scalars(select(Subject).order_by(Subject.created_at.desc(), Subject.id.desc()))
+    stats = _stats(db)
+    return SubjectList(items=[_to_out(s, stats) for s in subjects])
 
 
 @router.post("", response_model=SubjectOut, status_code=status.HTTP_201_CREATED)
 def create_subject(payload: SubjectCreate, db: Session = Depends(get_db)) -> SubjectOut:
-    # 201 Subject+계산필드 / 422 validation_error
-    raise NotImplementedAPIError()
+    # 201 Subject+계산필드(모두 0) / 422 validation_error
+    subject = Subject(
+        name=payload.name,
+        background=payload.background,
+        started_on=payload.started_on,
+        target_date=payload.target_date,
+    )
+    db.add(subject)
+    db.commit()
+    return _to_out(subject, {})
 
 
 @router.get("/{subject_id}", response_model=SubjectOut)
-def get_subject(subject_id: int, db: Session = Depends(get_db)) -> SubjectOut:
+def get_subject(subject_id: int = SubjectId, db: Session = Depends(get_db)) -> SubjectOut:
     # 200 Subject+계산필드 / 404 not_found
-    raise NotImplementedAPIError()
+    subject = _get_or_404(db, subject_id)
+    return _to_out(subject, _stats(db, subject_id))
 
 
 @router.patch("/{subject_id}", response_model=SubjectOut)
 def update_subject(
-    subject_id: int, payload: SubjectUpdate, db: Session = Depends(get_db)
+    payload: SubjectUpdate, subject_id: int = SubjectId, db: Session = Depends(get_db)
 ) -> SubjectOut:
     # 보낸 필드만 수정. 200 / 404 / 422
-    raise NotImplementedAPIError()
+    subject = _get_or_404(db, subject_id)
+    for field, value in payload.model_dump(exclude_unset=True).items():
+        setattr(subject, field, value)
+    db.commit()
+    return _to_out(subject, _stats(db, subject_id))

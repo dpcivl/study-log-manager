@@ -1,6 +1,49 @@
 {% extends "base.html" %}
+{% block title %}Study Log{% endblock %}
 {% block content %}
-<!-- S2 주제 목록. mockup/index.html의 S2 부분을 옮긴다. -->
-<section id="s2"></section>
+<!-- S2 -->
+<section id="s2" aria-labelledby="s2-title">
+  <header class="topbar">
+    <h1 id="s2-title" class="app-name">Study Log</h1>
+    <button id="logout-btn" class="btn btn-secondary" type="button">로그아웃</button>
+  </header>
+  <div class="page">
+    <div class="page-actions">
+      <button id="new-topic-btn" class="btn btn-primary" type="button" aria-expanded="false" aria-controls="topic-form">새 주제</button>
+    </div>
+    <form id="topic-form" class="topic-form" hidden novalidate>
+      <div class="field"><!-- F1 -->
+        <label for="topic-name">이름 (필수)</label>
+        <input id="topic-name" class="input" type="text" name="name" maxlength="100" aria-describedby="topic-name-error">
+        <p id="topic-name-error" class="form-error" role="alert" data-error-for="name" hidden></p>
+      </div>
+      <div class="row">
+        <div class="field">
+          <label for="topic-started">시작일</label>
+          <input id="topic-started" class="input" type="date" name="started_on" aria-describedby="topic-started-error">
+          <p id="topic-started-error" class="form-error" role="alert" data-error-for="started_on" hidden></p>
+        </div>
+        <div class="field">
+          <label for="topic-target">목표일 (선택)</label>
+          <input id="topic-target" class="input" type="date" name="target_date" aria-describedby="topic-target-error">
+          <p id="topic-target-error" class="form-error" role="alert" data-error-for="target_date" hidden></p>
+        </div>
+      </div>
+      <div class="field">
+        <label for="topic-background">배경 (선택)</label>
+        <textarea id="topic-background" class="input" name="background" maxlength="5000" aria-describedby="topic-background-error"></textarea>
+        <p id="topic-background-error" class="form-error" role="alert" data-error-for="background" hidden></p>
+      </div>
+      <p id="topic-form-error" class="form-error" role="alert" data-error-for="form" hidden></p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">만들기</button>
+        <button id="topic-cancel" class="btn btn-secondary" type="button">취소</button>
+      </div>
+    </form>
+    <p id="topic-load-error" class="form-error" role="alert" hidden></p>
+    <ul id="topic-list" class="topic-list"></ul>
+    <p id="topic-empty" class="empty-state" hidden>첫 학습 주제를 만들어 보세요</p>
+  </div>
+</section>
 {% endblock %}
 {% block scripts %}<script type="module" src="/static/js/subjects.js"></script>{% endblock %}
