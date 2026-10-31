@@ -8,10 +8,12 @@
     <h1 id="s3-title" class="topbar-title"></h1>
     <div class="topbar-actions">
       <button id="subject-edit-btn" class="btn btn-secondary" type="button" hidden>편집</button>
+      <button id="export-btn" class="btn btn-secondary" type="button" hidden>내보내기</button><!-- F6 -->
     </div>
   </header>
   <div class="page">
     <p id="subject-load-error" class="form-error" role="alert" hidden></p>
+    <p id="export-error" class="form-error" role="alert" hidden></p>
     <form id="subject-edit-form" class="topic-form" hidden novalidate>
       <div class="field"><!-- F1 -->
         <label for="edit-name">이름</label>

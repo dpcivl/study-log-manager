@@ -1,5 +1,6 @@
 // S3 주제 상세의 헤더·요약·편집. GET/PATCH /api/subjects/{id} (F1)
 import { api, clearErrors, dday, el, errorMessage, formatHours, showErrors } from './common.js';
+import { initExport } from './export.js';
 import { initNotes } from './notes.js';
 import { initSessions } from './sessions.js';
 
@@ -46,6 +47,7 @@ async function load() {
   editBtn.hidden = false;
   renderSummary(subject);
   initSessions(subjectId, refreshSummary); // F2 공부 시간 섹션
+  initExport(subjectId); // F6 내보내기 버튼
   initNotes(subjectId); // F3 새 노트 링크, F4 노트 필터·목록
 }
 

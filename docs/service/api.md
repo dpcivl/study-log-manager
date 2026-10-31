@@ -218,3 +218,41 @@ PATCH 요청 예(미해결 질문에 답을 채움)
 `tags`는 필터와 무관하게 이 주제 노트의 모든 태그(중복 제거, 가나다·알파벳순)이다. `kind`가 세 값 밖이면 422.
 
 `q`는 앞뒤 공백을 지운 뒤 200자 이내, `tag`는 최대 20개이고 각 1~30자다. 벗어나면 422다.
+
+## F6 마크다운 내보내기
+
+| 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
+|---|---|---|---|---|---|
+| F6 | GET | /api/subjects/{id}/export | 없음 | 200 `text/markdown; charset=utf-8`, `Content-Disposition: attachment; filename*=UTF-8''<name>.md` | 404 |
+
+### F6 GET /api/subjects/{id}/export
+성공 200, `Content-Type: text/markdown; charset=utf-8`. 본문 예
+```markdown
+# 베이스
+임베디드 HW 개발 1년 / SW 개발 2년 5개월 / 정보처리산업기사 / AI 엔지니어 1개월째
+
+# 기간
+- 시작: 2026-10-26
+- 목표: (없음)
+
+# 공부 기록
+- 10월 26일: 1h
+- 10월 27일: 2h
+
+# 기억할 것
+## csv 저장 시 인덱스 제외
+태그: pandas, csv
+
+인덱스를 제외하고 저장하려면 index=False
+
+...
+
+# 디버깅
+## FileNotFoundError: temp_csv
+...
+
+# 후기
+## 코딩팡 사용
+...
+```
+공부 기록은 날짜 오름차순, 노트는 유형별 섹션 안에서 생성 오름차순. 미해결 노트는 제목 뒤에 ` (미해결)`을 붙인다.
