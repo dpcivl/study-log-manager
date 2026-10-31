@@ -91,14 +91,21 @@ class SubjectList(BaseModel):
 # ---- F2 StudySession ----
 class StudySessionCreate(BaseModel):
     studied_on: date
-    minutes: int = Field(ge=1, le=1440)
+    # 정수만 받는다(60.5, "60", true는 422). 15 단위는 화면 입력 편의일 뿐이다.
+    minutes: int = Field(strict=True, ge=1, le=1440)
     memo: str = Field(default="", max_length=500)
+
+    _check_date = field_validator("studied_on", mode="before")(_iso_date_only)
 
 
 class StudySessionUpdate(BaseModel):
-    studied_on: date | None = None
-    minutes: int | None = Field(default=None, ge=1, le=1440)
-    memo: str | None = Field(default=None, max_length=500)
+    # 보낸 필드만 수정한다(exclude_unset). 세 필드 모두 null을 허용하지 않아
+    # 기본값을 None으로 두되 타입은 non-null로 선언한다(null을 보내면 422, 생략하면 변경 없음).
+    studied_on: date = Field(default=None)
+    minutes: int = Field(default=None, strict=True, ge=1, le=1440)
+    memo: str = Field(default=None, max_length=500)
+
+    _check_date = field_validator("studied_on", mode="before")(_iso_date_only)
 
 
 class StudySessionOut(_OutModel):

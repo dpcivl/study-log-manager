@@ -138,3 +138,20 @@ body {
 .summary { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; font-size: 14px; color: var(--muted); }
 .summary strong { color: var(--ink); }
 .background-text { margin: 0; white-space: pre-wrap; color: var(--muted); }
+
+/* 공부 시간 섹션 */
+.section { display: flex; flex-direction: column; gap: 12px; }
+.section h2 { margin: 0; font-size: 18px; }
+.quick-add { display: grid; grid-template-columns: 1fr 120px; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.quick-add .field-memo, .quick-add > .form-error, .quick-add .btn { grid-column: 1 / -1; }
+.record-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.record { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.record .date { font-weight: 600; }
+.record .dur { color: var(--accent); font-weight: 700; }
+.record .memo { flex: 1; min-width: 80px; color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
+.record-actions { display: flex; gap: 8px; margin-left: auto; }
+.record .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+.record > .form-error { flex-basis: 100%; }
+.record-edit { display: grid; grid-template-columns: 1fr 100px; gap: 8px; width: 100%; }
+.record-edit .field-memo, .record-edit .form-actions, .record-edit > .form-error { grid-column: 1 / -1; }
+.btn-more { align-self: center; }

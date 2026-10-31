@@ -43,6 +43,31 @@
     </form>
     <p id="subject-summary" class="summary"></p>
     <p id="subject-background" class="background-text" hidden></p>
+    <section id="sessions" class="section" aria-labelledby="sessions-title" hidden>
+      <h2 id="sessions-title">공부 시간</h2>
+      <form id="session-form" class="quick-add" novalidate><!-- F2 -->
+        <div class="field">
+          <label for="session-date">날짜</label>
+          <input id="session-date" class="input" type="date" name="studied_on" aria-describedby="session-date-error">
+          <p id="session-date-error" class="form-error" role="alert" data-error-for="studied_on" hidden></p>
+        </div>
+        <div class="field">
+          <label for="session-minutes">시간 (분)</label>
+          <input id="session-minutes" class="input" type="number" name="minutes" step="15" value="60" aria-describedby="session-minutes-error">
+          <p id="session-minutes-error" class="form-error" role="alert" data-error-for="minutes" hidden></p>
+        </div>
+        <div class="field field-memo">
+          <label for="session-memo">메모 (선택)</label>
+          <input id="session-memo" class="input" type="text" name="memo" maxlength="500" aria-describedby="session-memo-error">
+          <p id="session-memo-error" class="form-error" role="alert" data-error-for="memo" hidden></p>
+        </div>
+        <p id="session-form-error" class="form-error" role="alert" data-error-for="form" hidden></p>
+        <button class="btn btn-primary" type="submit">추가</button>
+      </form>
+      <p id="session-list-error" class="form-error" role="alert" hidden></p>
+      <ul id="session-list" class="record-list"></ul>
+      <button id="session-more" class="btn btn-secondary btn-more" type="button" hidden>더 보기</button>
+    </section>
   </div>
 </section>
 {% endblock %}

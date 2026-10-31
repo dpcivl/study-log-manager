@@ -1,5 +1,6 @@
 // S3 주제 상세의 헤더·요약·편집. GET/PATCH /api/subjects/{id} (F1)
 import { api, clearErrors, dday, el, errorMessage, formatHours, showErrors } from './common.js';
+import { initSessions } from './sessions.js';
 
 const root = document.getElementById('s3');
 const subjectId = root.dataset.subjectId;
@@ -42,6 +43,15 @@ async function load() {
   }
   subject = res.data;
   editBtn.hidden = false;
+  renderSummary(subject);
+  initSessions(subjectId, refreshSummary); // F2 공부 시간 섹션
+}
+
+// 공부 기록이 바뀐 뒤 요약 줄(누적, 최근 7일, 공부한 날)을 서버 값으로 다시 맞춘다.
+async function refreshSummary() {
+  const res = await api('GET', url);
+  if (!res.ok) return;
+  subject = res.data;
   renderSummary(subject);
 }
 

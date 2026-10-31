@@ -44,12 +44,26 @@ FIELD_MESSAGES: dict[str, str] = {
     "background": "배경은 5000자 이하여야 합니다",
     "started_on": "시작일은 YYYY-MM-DD 형식의 날짜여야 합니다",
     "target_date": "목표일은 YYYY-MM-DD 형식의 날짜여야 합니다",
+    # F2 StudySession
+    "studied_on": "날짜는 YYYY-MM-DD 형식이어야 합니다",
+    "minutes": "1~1440 사이여야 합니다",
+    "memo": "메모는 500자 이하여야 합니다",
+    # 목록 쿼리(F2부터 쓴다)
+    "page": "1 이상의 정수여야 합니다",
+    "limit": "1~100 사이의 정수여야 합니다",
 }
 
 # 경로의 id 이름 → 404 문구. 정수가 아닌 id나 범위 밖 id는 "없는 자원"으로 본다.
 NOT_FOUND_MESSAGES: dict[str, str] = {
     "subject_id": "주제를 찾을 수 없습니다",
+    "session_id": "기록을 찾을 수 없습니다",
 }
+
+
+def not_found(param: str) -> APIError:
+    """경로 id 이름(NOT_FOUND_MESSAGES의 키)에 맞는 404 오류."""
+    return APIError(404, "not_found", NOT_FOUND_MESSAGES[param])
+
 
 BODY_INVALID_MESSAGE = "요청 본문이 올바른 JSON 객체가 아닙니다"
 REQUIRED_MESSAGE = "필수 항목입니다"

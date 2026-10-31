@@ -2,25 +2,19 @@
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, Path, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
 from app.auth import require_session
 from app.clock import today_kst
 from app.db import get_db
-from app.errors import APIError
+from app.deps import IdPath
+from app.errors import not_found
 from app.models import Note, StudySession, Subject
 from app.schemas import SubjectCreate, SubjectList, SubjectOut, SubjectUpdate
 
 router = APIRouter(prefix="/api/subjects", tags=["F1"], dependencies=[Depends(require_session)])
-
-# SQLite 정수 범위 안으로 제한한다. 범위 밖 id는 없는 자원(404)으로 처리된다.
-SubjectId = Path(ge=1, le=2**63 - 1)
-
-
-def _not_found() -> APIError:
-    return APIError(404, "not_found", "주제를 찾을 수 없습니다")
 
 
 def _stats(db: Session, subject_id: int | None = None) -> dict[int, dict[str, int]]:
@@ -78,7 +72,7 @@ def _to_out(subject: Subject, stats: dict[int, dict[str, int]]) -> SubjectOut:
 def _get_or_404(db: Session, subject_id: int) -> Subject:
     subject = db.get(Subject, subject_id)
     if subject is None:
-        raise _not_found()
+        raise not_found("subject_id")
     return subject
 
 
@@ -105,7 +99,7 @@ def create_subject(payload: SubjectCreate, db: Session = Depends(get_db)) -> Sub
 
 
 @router.get("/{subject_id}", response_model=SubjectOut)
-def get_subject(subject_id: int = SubjectId, db: Session = Depends(get_db)) -> SubjectOut:
+def get_subject(subject_id: IdPath, db: Session = Depends(get_db)) -> SubjectOut:
     # 200 Subject+계산필드 / 404 not_found
     subject = _get_or_404(db, subject_id)
     return _to_out(subject, _stats(db, subject_id))
@@ -113,7 +107,7 @@ def get_subject(subject_id: int = SubjectId, db: Session = Depends(get_db)) -> S
 
 @router.patch("/{subject_id}", response_model=SubjectOut)
 def update_subject(
-    payload: SubjectUpdate, subject_id: int = SubjectId, db: Session = Depends(get_db)
+    payload: SubjectUpdate, subject_id: IdPath, db: Session = Depends(get_db)
 ) -> SubjectOut:
     # 보낸 필드만 수정. 200 / 404 / 422
     subject = _get_or_404(db, subject_id)

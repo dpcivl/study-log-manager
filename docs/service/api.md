@@ -98,3 +98,43 @@ PATCH 요청 예
 ```json
 { "error": { "code": "not_found", "message": "주제를 찾을 수 없습니다" } }
 ```
+
+## F2 공부 시간 기록
+
+| 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
+|---|---|---|---|---|---|
+| F2 | GET | /api/subjects/{id}/sessions?page&limit | 없음 | 200 목록(studied_on desc, 같은 날은 id desc) + `total_minutes` | 404 |
+| F2 | POST | /api/subjects/{id}/sessions | `{studied_on, minutes, memo?}` | 201 StudySession | 404 / 422 |
+| F2 | PATCH | /api/sessions/{id} | `{studied_on?, minutes?, memo?}` | 200 StudySession | 404 / 422 |
+| F2 | DELETE | /api/sessions/{id} | 없음 | 204 | 404 |
+
+### F2 GET /api/subjects/{id}/sessions
+```json
+{
+  "items": [
+    { "id": 4, "subject_id": 1, "studied_on": "2026-10-29", "minutes": 120, "memo": "", "created_at": "2026-10-29T13:00:00Z" },
+    { "id": 3, "subject_id": 1, "studied_on": "2026-10-28", "minutes": 60,  "memo": "시나공 ch3", "created_at": "2026-10-28T13:00:00Z" }
+  ],
+  "total": 4,
+  "page": 1,
+  "limit": 20,
+  "total_minutes": 360
+}
+```
+
+### F2 POST /api/subjects/{id}/sessions
+요청
+```json
+{ "studied_on": "2026-10-31", "minutes": 90, "memo": "groupby 연습" }
+```
+성공 201
+```json
+{ "id": 5, "subject_id": 1, "studied_on": "2026-10-31", "minutes": 90, "memo": "groupby 연습", "created_at": "2026-10-31T11:20:00Z" }
+```
+오류 422
+```json
+{ "error": { "code": "validation_error", "message": "입력값을 확인하세요", "fields": { "minutes": "1~1440 사이여야 합니다" } } }
+```
+
+### F2 PATCH /api/sessions/{id}, DELETE /api/sessions/{id}
+PATCH 요청 `{ "minutes": 60 }` → 200 StudySession. DELETE → 204. 없으면 404 not_found.
