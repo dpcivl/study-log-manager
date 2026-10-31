@@ -151,6 +151,7 @@
   .record .date { font-weight: 600; }
   .record .dur { color: var(--accent); font-weight: 700; }
   .record .memo { flex: 1; min-width: 80px; color: var(--muted); font-size: 14px; }
+  .record-actions { display: flex; gap: 8px; margin-left: auto; }
   .record .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
   .record-edit { display: grid; grid-template-columns: 1fr 100px; gap: 8px; width: 100%; }
   .record-edit .memo-input, .record-edit .form-actions, .record-edit .form-error { grid-column: 1 / -1; }
@@ -521,13 +522,13 @@
     { id: 5, subject_id: 2, studied_on: '2026-10-30', minutes: 90, memo: '1과목 개념', created_at: '2026-10-30T13:00:00Z' }
   ];
   // F2: 기록도 localStorage에 두고, 주제의 합계는 기록에서 다시 계산한다(서버의 계산 필드 흉내).
-  var SESSION_KEY = 'study-log-mockup-sessions';
+  var STUDY_SESSIONS_KEY = 'study-log-mockup-sessions';
   try {
-    var savedSessions = JSON.parse(localStorage.getItem(SESSION_KEY));
+    var savedSessions = JSON.parse(localStorage.getItem(STUDY_SESSIONS_KEY));
     if (Array.isArray(savedSessions)) sessions = savedSessions;
   } catch (e) { /* 저장값이 없거나 깨졌으면 더미 그대로 */ }
   function saveSessions() {
-    try { localStorage.setItem(SESSION_KEY, JSON.stringify(sessions)); } catch (e) { /* 무시 */ }
+    try { localStorage.setItem(STUDY_SESSIONS_KEY, JSON.stringify(sessions)); } catch (e) { /* 무시 */ }
   }
   var MINUTES_ERROR = '1~1440 사이여야 합니다'; // 422 fields.minutes 문구
   var sessionShown = 20;
@@ -624,7 +625,9 @@
         sessions = sessions.filter(function (x) { return x.id !== s.id; });
         refreshSessions();
       });
-      li.append(edit, del);
+      var actions = el('div', 'record-actions');
+      actions.append(edit, del);
+      li.appendChild(actions);
       list.appendChild(li);
     });
     document.getElementById('session-more').hidden = mine.length <= sessionShown;
@@ -637,6 +640,7 @@
   function editSession(li, s) {
     li.replaceChildren();
     var form = el('form', 'record-edit');
+    form.noValidate = true; // 범위 검사는 아래에서 하고, 15의 배수가 아닌 값도 받는다
     var d = el('input', 'input'); d.type = 'date'; d.value = s.studied_on; d.setAttribute('aria-label', '날짜');
     var m = el('input', 'input'); m.type = 'number'; m.step = 15; m.value = s.minutes; m.setAttribute('aria-label', '시간 (분)');
     var memo = el('input', 'input memo-input'); memo.type = 'text'; memo.value = s.memo; memo.maxLength = 500; memo.setAttribute('aria-label', '메모');
@@ -650,7 +654,7 @@
     form.addEventListener('submit', function (event) {
       event.preventDefault();
       var v = Number(m.value);
-      if (!(v >= 1 && v <= 1440)) { err.textContent = MINUTES_ERROR; err.hidden = false; return; }
+      if (m.value === '' || !Number.isInteger(v) || v < 1 || v > 1440) { err.textContent = MINUTES_ERROR; err.hidden = false; m.focus(); return; }
       s.studied_on = d.value || s.studied_on; s.minutes = v; s.memo = memo.value;
       refreshSessions();
     });

@@ -24,8 +24,23 @@ for i in $(seq 1 "$MAX_RUNS"); do
     --permission-mode acceptEdits \
     --allowedTools "Read" "Write" "Edit" "Bash(bash .claude/skills/hi-dev-mockup/scripts/check_ids.sh)"
 
-  # 완료 표시가 있으면 끝낸다
-  if [ -f "$PROGRESS" ] && tail -n 3 "$PROGRESS" | grep -q "STATUS: DONE"; then
+  # 회차마다 커밋해 둔다. 문제가 생기면 이 회차로 돌아올 수 있다
+  git add mockup docs/mockup-progress.md
+  git commit -q -m "mockup: 랄프 루프 ${i}회차" || true
+
+  # 완료 표시: 마지막 줄이 정확히 STATUS: DONE일 때만 인정한다
+  if [ -f "$PROGRESS" ] && tail -n 1 "$PROGRESS" | grep -qx "STATUS: DONE"; then
+    # Claude의 완료 선언을 스크립트가 다시 확인한다
+    if grep -qF -- "- [ ]" "$PROGRESS"; then
+      echo "체크 안 된 항목이 남아 있어 완료 표시를 지우고 계속합니다."
+      sed '$d' "$PROGRESS" > "$PROGRESS.tmp" && mv "$PROGRESS.tmp" "$PROGRESS"
+      continue
+    fi
+    if ! bash .claude/skills/hi-dev-mockup/scripts/check_ids.sh | grep -q "^PASS"; then
+      echo "ID 검사를 통과하지 못해 완료 표시를 지우고 계속합니다."
+      sed '$d' "$PROGRESS" > "$PROGRESS.tmp" && mv "$PROGRESS.tmp" "$PROGRESS"
+      continue
+    fi
     echo "===== 목업 완성: ${i}회차에 끝났습니다 ====="
     exit 0
   fi
