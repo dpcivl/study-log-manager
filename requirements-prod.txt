@@ -1,0 +1,8 @@
+fastapi>=0.162,<1
+starlette>=1.10,<2
+uvicorn[standard]>=0.54,<1
+sqlalchemy>=2.1.6,<3
+pydantic>=2.14,<3
+pydantic-settings>=2.16,<3
+itsdangerous>=2.2,<3
+jinja2>=3.1.6,<4
