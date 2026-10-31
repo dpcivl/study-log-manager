@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401  (테이블 등록)
+from app.auth import LoginRateLimiter
 from app.db import Base, make_engine, make_session_factory
 from app.errors import APIError
 from app.routers import auth, export, notes, pages, sessions, subjects
@@ -41,6 +42,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title="Study Log", lifespan=lifespan, docs_url=None, redoc_url=None)
     app.state.settings = settings
+    app.state.login_limiter = LoginRateLimiter()  # 앱 인스턴스마다 독립
+
+    @app.middleware("http")
+    async def require_json_content_type(request: Request, call_next):
+        # 본문이 있는 POST·PATCH는 application/json이어야 한다(415).
+        if request.method in ("POST", "PATCH"):
+            has_body = request.headers.get("content-length", "0") not in ("", "0") or (
+                "transfer-encoding" in request.headers
+            )
+            media_type = request.headers.get("content-type", "").split(";")[0].strip().lower()
+            if has_body and media_type != "application/json":
+                return _error_response(415, "unsupported_media_type", "JSON 형식으로 보내야 합니다")
+        return await call_next(request)
 
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

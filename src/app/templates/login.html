@@ -1,7 +1,24 @@
 {% extends "base.html" %}
 {% block title %}로그인 - Study Log{% endblock %}
 {% block content %}
-<!-- S1 로그인. mockup/index.html의 S1 부분을 옮긴다. -->
-<section id="s1"></section>
+<!-- S1 -->
+<section id="s1" class="screen-login" aria-labelledby="s1-title">
+  <div class="login-card">
+    <h1 id="s1-title">Study Log</h1>
+    <!-- F5 -->
+    <form id="login-form" class="login-form" novalidate>
+      <div class="field">
+        <label for="login-password">비밀번호</label>
+        <input id="login-password" class="input" type="password" name="password" autocomplete="current-password" autofocus>
+      </div>
+      <button class="btn btn-primary" type="submit">로그인</button>
+      <div id="login-errors" aria-live="polite">
+        <p id="login-error-invalid" class="form-error" hidden>비밀번호가 올바르지 않습니다</p>
+        <p id="login-error-locked" class="form-error" hidden>잠시 후 다시 시도하세요 (60초)</p>
+        <p id="login-error-other" class="form-error" hidden></p>
+      </div>
+    </form>
+  </div>
+</section>
 {% endblock %}
 {% block scripts %}<script type="module" src="/static/js/login.js"></script>{% endblock %}

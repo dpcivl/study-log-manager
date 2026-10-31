@@ -1,1 +1,94 @@
 /* 공통 스타일. mockup/index.html의 <style>을 기능별로 옮긴다. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #f6f7f8;
+  --surface: #ffffff;
+  --ink: #1b1f24;
+  --muted: #5b6470;
+  --line: #d8dde3;
+  --line-strong: #8a94a0;
+  --accent: #0b6e62;
+  --accent-hover: #095a50;
+  --accent-ink: #ffffff;
+  --danger: #b3261e;
+  --radius: 10px;
+  --font: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171a;
+    --surface: #1d2125;
+    --ink: #e9ecef;
+    --muted: #a4adb7;
+    --line: #363c43;
+    --line-strong: #6f7883;
+    --accent: #4cc2b1;
+    --accent-hover: #6fd3c4;
+    --accent-ink: #06231f;
+    --danger: #ff8f86;
+  }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+}
+[hidden] { display: none !important; }
+
+
+/* 공통 폼 요소 */
+.field { display: flex; flex-direction: column; gap: 6px; }
+.field label { font-size: 14px; font-weight: 600; }
+.input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.input:focus-visible,
+.btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn {
+  min-height: 44px;
+  padding: 10px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+.btn-primary { background: var(--accent); color: var(--accent-ink); }
+.btn-primary:hover { background: var(--accent-hover); }
+.form-error { margin: 0; color: var(--danger); font-size: 14px; }
+
+/* 로그인 화면 */
+.screen-login {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.login-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 32px 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.login-card h1 { margin: 0; font-size: 24px; line-height: 1.25; letter-spacing: -0.01em; }
+.login-form { display: flex; flex-direction: column; gap: 16px; }
+.login-form .btn { width: 100%; }
