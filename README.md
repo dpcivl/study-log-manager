@@ -17,7 +17,7 @@ flowchart LR
 | [hi-dev-plan](.claude/skills/hi-dev-plan/SKILL.md) | 요구사항을 조사해 기능, 화면, API 약속을 문서로 고정한다 | 사용자의 설명과 기존 노트 | [docs/design.md](docs/design.md) |
 | [hi-dev-mockup](.claude/skills/hi-dev-mockup/SKILL.md) | 설계대로 동작하는 HTML 목업을 한 걸음씩 만든다 | 설계 문서 | [mockup/index.html](mockup/index.html) |
 | [hi-dev-impl](.claude/skills/hi-dev-impl/SKILL.md) | 지휘자가 서브에이전트에게 일을 나눠 기능을 끝까지 완성한다 | 설계 문서, 목업 | `src/`, `tests/`, [실행 보고서](docs/impl-reports/) |
-| [hi-dev-audit](.claude/skills/hi-dev-audit/SKILL.md) | 전체 코드를 보안 관점으로 점검하고 수정 항목을 등록한다 | 코드 전체 | 아직 실행하지 않음 |
+| [hi-dev-audit](.claude/skills/hi-dev-audit/SKILL.md) | 전체 코드를 보안 관점으로 점검하고 수정 항목을 등록한다 | 코드 전체 | [감사 보고서](docs/audit-reports/2026-11-01.md), [재확인](docs/audit-reports/2026-11-01-recheck.md) |
 
 단계 사이의 약속은 문서입니다. 각 단계는 앞 단계의 파일만 읽으므로 대화 기록이 없어도 이어서 진행할 수 있습니다.
 
@@ -46,9 +46,9 @@ flowchart LR
 
 | 항목 | 값 |
 | --- | --- |
-| 자동 테스트 | 702개 |
-| 앱 코드 | 약 3,000줄 (외부 라이브러리 제외) |
-| 테스트 코드 | 약 5,900줄 |
+| 자동 테스트 | 1,056개 |
+| 앱 코드 | 약 3,300줄 (외부 라이브러리 제외) |
+| 테스트 코드 | 약 8,000줄 |
 
 | 기능 | 테스트 루프 | 리뷰 수정 라운드 | 보고서 |
 | --- | --- | --- | --- |
@@ -59,6 +59,7 @@ flowchart LR
 | F4 노트 검색·필터 | 2 | 1 | [F4](docs/impl-reports/F4.md) |
 | F6 마크다운 내보내기 | 0 | 0 | [F6](docs/impl-reports/F6.md) |
 | 시드 스크립트 | 0 | 0 | [SEED](docs/impl-reports/SEED.md) |
+| 보안 감사 수정 | 2 | 3 | [SEC](docs/impl-reports/SEC.md) |
 
 구현 뒤 테스트와 리뷰에서 잡힌 문제의 예입니다.
 - 동시에 보낸 로그인 요청이 5회 제한을 넘을 수 있는 경쟁 조건
@@ -67,8 +68,8 @@ flowchart LR
 - 약 7% 확률로 실패하던 변조 쿠키 테스트
 
 ### 한계
-- 공개 배포는 하지 않았습니다. [배포 전에 처리할 항목](docs/impl-reports/SUMMARY.md)이 남아 있습니다.
-- `/hi-dev-audit`은 아직 실행하지 않았습니다.
+- 공개 배포는 하지 않았습니다. 공개할 때 따를 절차는 [실행과 백업](docs/service/running.md)에 있습니다.
+- 실제 프록시 환경의 동작은 배포 위치가 정해진 뒤 확인해야 합니다.
 - 작은 지적은 수정하지 않고 각 보고서에 남겼습니다.
 
 ## 파이프라인 써 보기

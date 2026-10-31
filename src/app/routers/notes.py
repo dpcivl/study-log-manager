@@ -9,7 +9,7 @@ from app.db import get_db
 from app.deps import IdPath, fetch_page, get_subject_or_404
 from app.errors import APIError, not_found
 from app.models import Note, utcnow
-from app.schemas import NoteCreate, NoteKind, NoteList, NoteOut, NoteUpdate
+from app.schemas import NoteCreate, NoteKind, NoteList, NoteOut, NoteUpdate, has_control_chars
 
 router = APIRouter(prefix="/api", tags=["F3", "F4"], dependencies=[Depends(require_session)])
 
@@ -25,18 +25,25 @@ MAX_QUERY_LENGTH = 200
 MAX_TAG_FILTERS = 20
 MAX_TAG_LENGTH = 30
 QUERY_INVALID_MESSAGE = "검색어는 200자 이내여야 합니다"
+QUERY_CHARS_MESSAGE = "검색어에 쓸 수 없는 문자가 있습니다"
 TAG_FILTER_INVALID_MESSAGE = "태그 조건은 최대 20개, 각 1~30자입니다"
+TAG_FILTER_CHARS_MESSAGE = "태그 조건에 쓸 수 없는 문자가 있습니다"
 
 
 def _validate_filters(tag: list[str] | None, q: str | None) -> str:
-    """검색어(앞뒤 공백 제거, 200자 이내, NUL 없음)와 태그 조건(최대 20개, 각 1~30자)을 검사한다.
-    벗어나면 422 fields.q / fields.tag. 통과하면 다듬은 검색어를 돌려준다."""
+    """검색어(앞뒤 공백 제거, 200자 이내, NUL 없음)와 태그 조건(최대 20개, 각 1~30자, 제어 문자·쉼표
+    없음)을 검사한다. 벗어나면 422 fields.q / fields.tag. 통과하면 다듬은 검색어를 돌려준다."""
     fields: dict[str, str] = {}
     keyword = (q or "").strip()
-    if len(keyword) > MAX_QUERY_LENGTH or "\x00" in keyword:
+    if len(keyword) > MAX_QUERY_LENGTH:
         fields["q"] = QUERY_INVALID_MESSAGE
-    if tag and (len(tag) > MAX_TAG_FILTERS or any(not 1 <= len(t) <= MAX_TAG_LENGTH for t in tag)):
-        fields["tag"] = TAG_FILTER_INVALID_MESSAGE
+    elif "\x00" in keyword:
+        fields["q"] = QUERY_CHARS_MESSAGE
+    if tag:
+        if len(tag) > MAX_TAG_FILTERS or any(not 1 <= len(t) <= MAX_TAG_LENGTH for t in tag):
+            fields["tag"] = TAG_FILTER_INVALID_MESSAGE
+        elif any("," in t or has_control_chars(t) for t in tag):
+            fields["tag"] = TAG_FILTER_CHARS_MESSAGE
     if fields:
         raise APIError(422, "validation_error", "입력값을 확인하세요", fields=fields)
     return keyword

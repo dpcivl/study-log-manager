@@ -2,6 +2,21 @@
 {"error": {"code": str, "message": str, "fields"?: {필드명: 메시지}, "retry_after"?: 초}}
 """
 
+from starlette.responses import JSONResponse
+
+
+def error_response(
+    status_code: int,
+    code: str,
+    message: str,
+    headers: dict[str, str] | None = None,
+    **extra,
+) -> JSONResponse:
+    """오류 본문을 만드는 공용 함수. extra 중 None인 값은 넣지 않는다."""
+    error = {"code": code, "message": message}
+    error.update({k: v for k, v in extra.items() if v is not None})
+    return JSONResponse(status_code=status_code, content={"error": error}, headers=headers)
+
 
 class APIError(Exception):
     def __init__(
@@ -59,6 +74,16 @@ FIELD_MESSAGES: dict[str, str] = {
     "limit": "1~100 사이의 정수여야 합니다",
 }
 
+# 제어 문자(와 태그의 쉼표)로 거부된 값은 길이 안내 대신 이유를 말한다. 검증기가 이 문구로
+# ValueError를 던지면 validation_fields가 그대로 필드 문구로 쓴다.
+CONTROL_ONE_LINE_MESSAGE = "줄바꿈이나 제어 문자를 쓸 수 없습니다"
+CONTROL_MULTI_LINE_MESSAGE = "쓸 수 없는 제어 문자가 있습니다"
+TAG_CHARS_MESSAGE = "태그에 쉼표나 제어 문자를 쓸 수 없습니다"
+_REASON_MESSAGES = frozenset(
+    {CONTROL_ONE_LINE_MESSAGE, CONTROL_MULTI_LINE_MESSAGE, TAG_CHARS_MESSAGE}
+)
+_VALUE_ERROR_PREFIX = "Value error, "
+
 # 경로의 id 이름 → 404 문구. 정수가 아닌 id나 범위 밖 id는 "없는 자원"으로 본다.
 NOT_FOUND_MESSAGES: dict[str, str] = {
     "subject_id": "주제를 찾을 수 없습니다",
@@ -94,5 +119,9 @@ def validation_fields(errors: list[dict]) -> dict[str, str]:
         else:
             key = loc[0]
             default = REQUIRED_MESSAGE if err.get("type") == "missing" else INVALID_MESSAGE
-        fields.setdefault(key, FIELD_MESSAGES.get(key, default))
+        reason = str(err.get("msg", "")).removeprefix(_VALUE_ERROR_PREFIX)
+        if err.get("type") == "value_error" and reason in _REASON_MESSAGES:
+            fields.setdefault(key, reason)
+        else:
+            fields.setdefault(key, FIELD_MESSAGES.get(key, default))
     return fields

@@ -8,3 +8,4 @@
 | F5 | 비밀번호 로그인 | 완료 | 2026-10-31 | minor 11건·info 11건. 대표: 프록시 뒤 IP·Secure 판정이 uvicorn 설정에 의존, 60초·30일 만료 테스트 없음, 동시 요청 테스트 단언이 `<= 5`. 전체: [F5 실행 보고서](../impl-reports/F5.md) |
 | F6 | 마크다운 내보내기 | 완료 | 2026-10-31 | minor 6건, info 4건. docs/impl-reports/F6.md 참고 |
 | SEED | 초기 데이터 시드 스크립트 | 완료 | 2026-10-31 | minor 4건, info 4건. docs/impl-reports/SEED.md 참고 |
+| SEC | 보안 감사 결과 수정 | 완료 | 2026-11-01 | docs/impl-reports/SEC.md 참고 |

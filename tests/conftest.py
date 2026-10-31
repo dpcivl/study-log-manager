@@ -20,6 +20,8 @@ def make_settings(**overrides) -> Settings:
         "app_password": TEST_PASSWORD,
         "secret_key": TEST_SECRET_KEY,
         "database_url": "sqlite:///:memory:",
+        # 셸 환경 변수 PUBLIC_DEPLOY의 영향을 받지 않도록 기본은 항상 끈다.
+        "public_deploy": False,
     }
     values.update(overrides)
     return Settings(_env_file=None, **values)

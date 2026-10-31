@@ -5,10 +5,23 @@
 - 로그인·로그아웃을 제외한 모든 API는 `session` 쿠키가 유효해야 한다. 없거나 만료면 `401 {"error":{"code":"unauthorized","message":"로그인이 필요합니다"}}`.
 - 오류 응답은 모두 `{"error":{"code": string, "message": string, "fields"?: {필드명: 메시지}, "retry_after"?: 초}}` 모양이다. `fields`는 422에서만, `retry_after`는 429에서만 붙는다. 검증 실패는 422, 없는 자원은 404.
 - 본문이 있는 POST·PATCH는 `Content-Type: application/json`이어야 한다. 아니면 `415 {"error":{"code":"unsupported_media_type","message":"JSON 형식으로 보내야 합니다"}}`.
-- 날짜는 `YYYY-MM-DD`, 시각은 ISO 8601 UTC(`2026-10-31T11:20:00Z`).
+- 날짜는 `YYYY-MM-DD`, 시각은 ISO 8601 UTC(`2026-10-31T11:20:00Z`). 만들 수 없는 날짜(`0000-01-01` 등)는 422다.
 - 목록은 `{"items": [...], "total": n, "page": p, "limit": l}` 모양이고 `page`는 1부터, `limit` 기본 20·최대 100.
 - 깨진 JSON과 객체가 아닌 본문은 422 `fields.request`로 돌려준다.
 - 처리되지 않은 예외는 500 `internal_error`로 돌려준다.
+- 본문이 1MiB를 넘으면 413 `payload_too_large`다. `Content-Length`가 올바르지 않으면 400 `bad_request`다.
+- 모든 응답에 보안 헤더가 붙는다: `Content-Security-Policy`, `X-Content-Type-Options: nosniff`, `X-Frame-Options`, `Referrer-Policy`.
+- `/api` 응답에는 `Cache-Control: no-store`가 붙는다.
+- `PUBLIC_DEPLOY=true`이면 모든 응답에 HSTS(`Strict-Transport-Security`)가 붙는다.
+- `/openapi.json`, `/docs`, `/redoc`은 없다.
+- 로그인이 필요한 API는 로그인 전이면 401, 로그인 후면 422 `fields.request`다. `/api/login`은 422 `fields.request`다.
+
+## 입력 문자 규칙
+- name, title, memo: 줄바꿈과 제어 문자를 쓸 수 없다. 거부하면 422 `fields`에 `줄바꿈이나 제어 문자를 쓸 수 없습니다`.
+- 태그: 앞뒤 공백(탭, 줄바꿈 포함)을 먼저 지운 뒤 검사한다. 쉼표와 제어 문자를 쓸 수 없다. 거부하면 422 `태그에 쉼표나 제어 문자를 쓸 수 없습니다`.
+- background, body: 줄바꿈과 탭을 뺀 제어 문자(NUL 포함)를 쓸 수 없다. 거부하면 422 `쓸 수 없는 제어 문자가 있습니다`.
+- F4의 `q`에 NUL이 있으면 422 `검색어에 쓸 수 없는 문자가 있습니다`다. `tag` 쿼리에 제어 문자가 있으면 422 `태그 조건에 쓸 수 없는 문자가 있습니다`다.
+- `password`는 이 규칙에서 뺀다(아래 F5 참고).
 
 ## 화면(HTML) 주소
 | 주소 | 화면 | 미로그인 시 |
@@ -27,14 +40,14 @@ HTML 페이지는 뼈대만 내려주고, 데이터는 페이지의 JS가 위 AP
 | 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
 |---|---|---|---|---|---|
 | F5 | POST | /api/login | `{password}` | 204 + `Set-Cookie: session=...; HttpOnly; SameSite=Lax; Max-Age=2592000` | 401 invalid_password / 429 too_many_attempts |
-| F5 | POST | /api/logout | 없음 | 204 + 쿠키 삭제 | 없음 |
+| F5 | POST | /api/logout | 없음 | 204 + 쿠키 삭제 | 403 forbidden |
 
 ### F5 POST /api/login
 요청
 ```json
 { "password": "correct horse battery staple" }
 ```
-성공: 204, 본문 없음, `Set-Cookie: session=<token>; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` (HTTPS면 `Secure` 추가)
+성공: 204, 본문 없음, `Set-Cookie: session=<token>; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` (`PUBLIC_DEPLOY=true`면 항상 `Secure` 추가, 꺼져 있으면 HTTPS 요청에만 추가)
 
 오류 401
 ```json
@@ -45,8 +58,15 @@ HTML 페이지는 뼈대만 내려주고, 데이터는 페이지의 JS가 위 AP
 { "error": { "code": "too_many_attempts", "message": "잠시 후 다시 시도하세요", "retry_after": 60 } }
 ```
 
+`password`가 1024자를 넘으면 비교 없이 401 `invalid_password`를 내고, 실패 횟수에 들어간다.
+
 ### F5 POST /api/logout
 성공: 204, `Set-Cookie: session=; Max-Age=0`
+
+오류 403: `Sec-Fetch-Site: cross-site` 요청이면 쿠키를 지우지 않고 거부한다.
+```json
+{"error":{"code":"forbidden","message":"다른 사이트에서 보낸 요청입니다"}}
+```
 
 ## F1 학습 주제 관리
 
@@ -217,7 +237,7 @@ PATCH 요청 예(미해결 질문에 답을 채움)
 ```
 `tags`는 필터와 무관하게 이 주제 노트의 모든 태그(중복 제거, 가나다·알파벳순)이다. `kind`가 세 값 밖이면 422.
 
-`q`는 앞뒤 공백을 지운 뒤 200자 이내, `tag`는 최대 20개이고 각 1~30자다. 벗어나면 422다.
+`q`는 앞뒤 공백을 지운 뒤 200자 이내, `tag`는 최대 20개이고 각 1~30자다. 벗어나면 422다. `q`에 NUL 문자가 있으면 422 `검색어에 쓸 수 없는 문자가 있습니다`다.
 
 ## F6 마크다운 내보내기
 

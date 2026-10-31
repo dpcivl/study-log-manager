@@ -6,6 +6,8 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_serializer, field_validator
 
+from app.errors import CONTROL_MULTI_LINE_MESSAGE, CONTROL_ONE_LINE_MESSAGE, TAG_CHARS_MESSAGE
+
 NoteKind = Literal["remember", "debug", "review"]
 
 
@@ -23,6 +25,32 @@ class LoginRequest(BaseModel):
     password: str
 
 
+# ---- 문자열 공통 검증 ----
+# 한 줄 필드(name, title, memo, 태그)는 제어 문자(U+0000~U+001F, U+007F)를 모두 거부한다.
+# 여러 줄 필드(background, body)는 줄바꿈(\n, \r)과 탭(\t)만 허용한다.
+# 위반하면 422가 되고, 필드 문구는 그 이유를 말하는 errors의 문구를 쓴다.
+# password에는 적용하지 않는다.
+_CONTROL_ONE_LINE = re.compile(r"[\x00-\x1f\x7f]")
+_CONTROL_MULTI_LINE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
+
+def has_control_chars(value: str, *, multiline: bool = False) -> bool:
+    pattern = _CONTROL_MULTI_LINE if multiline else _CONTROL_ONE_LINE
+    return pattern.search(value) is not None
+
+
+def _single_line(value: str) -> str:
+    if has_control_chars(value):
+        raise ValueError(CONTROL_ONE_LINE_MESSAGE)
+    return value
+
+
+def _multi_line(value: str) -> str:
+    if has_control_chars(value, multiline=True):
+        raise ValueError(CONTROL_MULTI_LINE_MESSAGE)
+    return value
+
+
 # ---- F1 Subject ----
 def _not_blank(value: str) -> str:
     """공백만 있는 이름은 비어 있는 것으로 본다. 통과한 값은 받은 그대로 저장한다."""
@@ -31,13 +59,23 @@ def _not_blank(value: str) -> str:
     return value
 
 
-_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO_DATE = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})")  # \d는 다른 문자의 숫자도 받는다
 
 
 def _iso_date_only(value: object) -> object:
-    """날짜는 "YYYY-MM-DD" 문자열만 받는다(숫자 타임스탬프, 날짜+시각 문자열은 거부)."""
-    if value is None or (isinstance(value, str) and _ISO_DATE.fullmatch(value)):
+    """날짜는 ASCII "YYYY-MM-DD" 문자열만 받는다(숫자 타임스탬프, 날짜+시각 문자열은 거부).
+
+    0000-01-01, 2026-02-30처럼 만들 수 없는 날짜도 여기서 거부한다.
+    """
+    if value is None:
         return value
+    if isinstance(value, str) and (match := _ISO_DATE.fullmatch(value)):
+        try:
+            date(*map(int, match.groups()))
+        except ValueError:
+            pass
+        else:
+            return value
     raise ValueError("날짜는 YYYY-MM-DD 형식이어야 합니다")
 
 
@@ -48,6 +86,8 @@ class SubjectCreate(BaseModel):
     target_date: date | None = None
 
     _check_name = field_validator("name")(_not_blank)
+    _check_name_line = field_validator("name")(_single_line)
+    _check_background = field_validator("background")(_multi_line)
     _check_dates = field_validator("started_on", "target_date", mode="before")(_iso_date_only)
 
 
@@ -61,6 +101,8 @@ class SubjectUpdate(BaseModel):
     target_date: date | None = None
 
     _check_name = field_validator("name")(_not_blank)
+    _check_name_line = field_validator("name")(_single_line)
+    _check_background = field_validator("background")(_multi_line)
     _check_dates = field_validator("started_on", "target_date", mode="before")(_iso_date_only)
 
 
@@ -96,6 +138,7 @@ class StudySessionCreate(BaseModel):
     memo: str = Field(default="", max_length=500)
 
     _check_date = field_validator("studied_on", mode="before")(_iso_date_only)
+    _check_memo = field_validator("memo")(_single_line)
 
 
 class StudySessionUpdate(BaseModel):
@@ -106,6 +149,7 @@ class StudySessionUpdate(BaseModel):
     memo: str = Field(default=None, max_length=500)
 
     _check_date = field_validator("studied_on", mode="before")(_iso_date_only)
+    _check_memo = field_validator("memo")(_single_line)
 
 
 class StudySessionOut(_OutModel):
@@ -140,19 +184,24 @@ def _clean_tags(tags: list[str]) -> list[str]:
     개수(최대 20)와 길이(각 1..30자)는 정리를 마친 값으로 검사한다.
     """
     cleaned: list[str] = []
+    seen: set[str] = set()
     for tag in tags:
+        # 앞뒤 공백(탭·줄바꿈 포함)을 먼저 지운 뒤, 남은 값 안쪽의 제어 문자와 쉼표를 검사한다.
+        tag = tag.strip().lower()
+        if has_control_chars(tag) or "," in tag:
+            raise ValueError(TAG_CHARS_MESSAGE)
         try:
             # JSON의 짝 없는 서로게이트("\ud800")는 UTF-8로 저장·응답할 수 없다.
             tag.encode("utf-8")
         except UnicodeEncodeError:
             raise ValueError("태그에 사용할 수 없는 문자가 있습니다") from None
-        tag = tag.strip().lower()
         if not 1 <= len(tag) <= MAX_TAG_LENGTH:
             raise ValueError("태그는 각 1~30자여야 합니다")
-        if tag not in cleaned:
+        if tag not in seen:
+            seen.add(tag)
             cleaned.append(tag)
-    if len(cleaned) > MAX_TAGS:
-        raise ValueError("태그는 최대 20개입니다")
+            if len(cleaned) > MAX_TAGS:
+                raise ValueError("태그는 최대 20개입니다")
     return cleaned
 
 
@@ -171,6 +220,8 @@ class NoteCreate(BaseModel):
     is_open: bool = Field(default=False, strict=True)
 
     _check_title = field_validator("title")(_title_not_blank)
+    _check_title_line = field_validator("title")(_single_line)
+    _check_body = field_validator("body")(_multi_line)
     _check_tags = field_validator("tags")(_clean_tags)
 
 
@@ -184,6 +235,8 @@ class NoteUpdate(BaseModel):
     is_open: bool = Field(default=None, strict=True)
 
     _check_title = field_validator("title")(_title_not_blank)
+    _check_title_line = field_validator("title")(_single_line)
+    _check_body = field_validator("body")(_multi_line)
     _check_tags = field_validator("tags")(_clean_tags)
 
 

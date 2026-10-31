@@ -13,6 +13,7 @@ class Base(DeclarativeBase):
 
 
 def make_engine(database_url: str) -> Engine:
+    # hide_parameters: DB 오류가 로그에 남을 때 바인딩된 값(노트 내용 등)이 같이 찍히지 않게 한다.
     if database_url.startswith("sqlite"):
         if ":memory:" in database_url:
             # 모든 연결이 같은 메모리 DB를 보도록 한다.
@@ -20,9 +21,12 @@ def make_engine(database_url: str) -> Engine:
                 database_url,
                 connect_args={"check_same_thread": False},
                 poolclass=StaticPool,
+                hide_parameters=True,
             )
-        return create_engine(database_url, connect_args={"check_same_thread": False})
-    return create_engine(database_url)
+        return create_engine(
+            database_url, connect_args={"check_same_thread": False}, hide_parameters=True
+        )
+    return create_engine(database_url, hide_parameters=True)
 
 
 def make_session_factory(engine: Engine) -> sessionmaker[Session]:

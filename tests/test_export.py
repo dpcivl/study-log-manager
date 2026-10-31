@@ -684,18 +684,18 @@ def test_f6_filename_has_no_path_separator_or_dotdot(auth_client: TestClient):
     assert ".." not in filename
 
 
-def test_f6_name_with_newline_does_not_break_response(auth_client: TestClient):
-    name = "줄\n바꿈"
-    sid = make_subject(auth_client, name=name)
+def test_f6_name_with_newline_is_rejected_at_creation(auth_client: TestClient):
+    # SEC-5: 이름 같은 한 줄 필드는 제어 문자를 거부하므로 줄바꿈 든 이름은 만들어지지 않는다.
+    # 따라서 Content-Disposition에 줄바꿈이 들어갈 이름이 새로 저장되지 않는다.
+    response = auth_client.post(
+        "/api/subjects",
+        json={"name": "줄\n바꿈", "background": "", "started_on": "2026-10-26"},
+    )
 
-    response = export(auth_client, sid)
-
-    assert response.status_code == 200
-    value = response.headers["content-disposition"]
-    assert "\n" not in value
-    assert "\r" not in value
-    assert value == disposition(name)
-    assert response.headers["content-type"] == "text/markdown; charset=utf-8"
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "validation_error"
+    assert "name" in response.json()["error"]["fields"]
+    assert auth_client.get("/api/subjects").json()["items"] == []
 
 
 def test_f6_name_with_double_quote_does_not_break_response(
