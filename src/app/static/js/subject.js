@@ -45,6 +45,7 @@ async function load() {
   editBtn.hidden = false;
   renderSummary(subject);
   initSessions(subjectId, refreshSummary); // F2 공부 시간 섹션
+  document.getElementById('notes').hidden = false; // F3 새 노트 링크(목록은 F4)
 }
 
 // 공부 기록이 바뀐 뒤 요약 줄(누적, 최근 7일, 공부한 날)을 서버 값으로 다시 맞춘다.

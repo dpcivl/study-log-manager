@@ -440,3 +440,32 @@ def test_f5_틀린_비밀번호를_동시에_보내도_401은_5개까지이고_�
     assert after.json()["error"]["code"] == "too_many_attempts"
     assert after.headers.get_list("set-cookie") == []
     assert_unauthorized(client.get("/api/subjects"))
+
+
+# ---------------------------------------------------------------------------
+# 리뷰 라운드 1: 짝 없는 서로게이트 이스케이프(\ud800) 비밀번호
+# ---------------------------------------------------------------------------
+
+_SURROGATE_LOGIN = dict(
+    content='{"password":"\\ud800"}',
+    headers={"Content-Type": "application/json"},
+)
+
+
+def test_f5_짝_없는_서로게이트_비밀번호는_401_invalid_password다(client):
+    response = client.post("/api/login", **_SURROGATE_LOGIN)
+
+    assert response.status_code == 401, response.text
+    assert response.headers["content-type"].startswith("application/json")
+    assert response.json() == INVALID_PASSWORD_BODY
+
+
+def test_f5_짝_없는_서로게이트_비밀번호도_실패_횟수에_들어가_6번째는_429다(client):
+    for attempt in range(1, 6):
+        response = client.post("/api/login", **_SURROGATE_LOGIN)
+        assert response.status_code == 401, (attempt, response.text)
+        assert response.json() == INVALID_PASSWORD_BODY
+
+    response = client.post("/api/login", **_SURROGATE_LOGIN)
+
+    assert response.status_code == 429, response.text

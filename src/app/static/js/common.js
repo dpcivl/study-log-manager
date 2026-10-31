@@ -47,6 +47,11 @@ export function todayKst() {
   return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+// ISO 8601 UTC 시각 → KST 날짜 "YYYY-MM-DD"
+export function dateKst(iso) {
+  return new Date(Date.parse(iso) + 9 * 3600 * 1000).toISOString().slice(0, 10);
+}
+
 // 분 → "1.5h" (소수 첫째 자리까지, 0.0이면 "0h")
 export function formatHours(minutes) {
   return String(Math.round(minutes / 6) / 10) + 'h';
@@ -88,5 +93,5 @@ export function showErrors(form, res, fallback) {
     p.textContent = general.join(' ');
     p.hidden = false;
   }
-  if (first) first.focus();
+  if (first && typeof first.focus === 'function') first.focus(); // 라디오 묶음은 focus가 없다
 }

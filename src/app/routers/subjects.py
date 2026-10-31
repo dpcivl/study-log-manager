@@ -9,8 +9,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_session
 from app.clock import today_kst
 from app.db import get_db
-from app.deps import IdPath
-from app.errors import not_found
+from app.deps import IdPath, get_subject_or_404
 from app.models import Note, StudySession, Subject
 from app.schemas import SubjectCreate, SubjectList, SubjectOut, SubjectUpdate
 
@@ -69,13 +68,6 @@ def _to_out(subject: Subject, stats: dict[int, dict[str, int]]) -> SubjectOut:
     return SubjectOut.model_validate(subject).model_copy(update=stats.get(subject.id, {}))
 
 
-def _get_or_404(db: Session, subject_id: int) -> Subject:
-    subject = db.get(Subject, subject_id)
-    if subject is None:
-        raise not_found("subject_id")
-    return subject
-
-
 @router.get("", response_model=SubjectList)
 def list_subjects(db: Session = Depends(get_db)) -> SubjectList:
     # 200 {items:[Subject+계산필드]} 생성 최신순(같은 시각이면 id가 큰 쪽이 먼저)
@@ -101,7 +93,7 @@ def create_subject(payload: SubjectCreate, db: Session = Depends(get_db)) -> Sub
 @router.get("/{subject_id}", response_model=SubjectOut)
 def get_subject(subject_id: IdPath, db: Session = Depends(get_db)) -> SubjectOut:
     # 200 Subject+계산필드 / 404 not_found
-    subject = _get_or_404(db, subject_id)
+    subject = get_subject_or_404(db, subject_id)
     return _to_out(subject, _stats(db, subject_id))
 
 
@@ -110,7 +102,7 @@ def update_subject(
     payload: SubjectUpdate, subject_id: IdPath, db: Session = Depends(get_db)
 ) -> SubjectOut:
     # 보낸 필드만 수정. 200 / 404 / 422
-    subject = _get_or_404(db, subject_id)
+    subject = get_subject_or_404(db, subject_id)
     for field, value in payload.model_dump(exclude_unset=True).items():
         setattr(subject, field, value)
     db.commit()

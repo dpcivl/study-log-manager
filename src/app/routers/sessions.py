@@ -6,9 +6,9 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_session
 from app.db import get_db
-from app.deps import IdPath
+from app.deps import IdPath, get_subject_or_404
 from app.errors import not_found
-from app.models import StudySession, Subject
+from app.models import StudySession
 from app.schemas import (
     StudySessionCreate,
     StudySessionList,
@@ -20,13 +20,6 @@ router = APIRouter(prefix="/api", tags=["F2"], dependencies=[Depends(require_ses
 
 # SQLite OFFSET이 다룰 수 있는 범위. 넘으면 그 페이지는 비어 있다.
 _MAX_OFFSET = 2**62
-
-
-def _get_subject_or_404(db: Session, subject_id: int) -> Subject:
-    subject = db.get(Subject, subject_id)
-    if subject is None:
-        raise not_found("subject_id")
-    return subject
 
 
 def _get_session_or_404(db: Session, session_id: int) -> StudySession:
@@ -44,7 +37,7 @@ def list_sessions(
     db: Session = Depends(get_db),
 ) -> StudySessionList:
     # 200 목록(studied_on desc, 같은 날은 id desc) + total_minutes / 404
-    _get_subject_or_404(db, subject_id)
+    get_subject_or_404(db, subject_id)
     total, total_minutes = db.execute(
         select(func.count(StudySession.id), func.coalesce(func.sum(StudySession.minutes), 0)).where(
             StudySession.subject_id == subject_id
@@ -80,7 +73,7 @@ def create_session(
     payload: StudySessionCreate, subject_id: IdPath, db: Session = Depends(get_db)
 ) -> StudySessionOut:
     # 201 StudySession / 404 / 422
-    _get_subject_or_404(db, subject_id)
+    get_subject_or_404(db, subject_id)
     study_session = StudySession(
         subject_id=subject_id,
         studied_on=payload.studied_on,

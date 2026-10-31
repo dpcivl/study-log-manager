@@ -130,20 +130,61 @@ class StudySessionList(BaseModel):
 
 
 # ---- F3 / F4 Note ----
+MAX_TAGS = 20
+MAX_TAG_LENGTH = 30
+
+
+def _clean_tags(tags: list[str]) -> list[str]:
+    """태그를 앞뒤 공백 제거·소문자로 정리하고 중복은 처음 하나만 남긴다(순서 유지).
+
+    개수(최대 20)와 길이(각 1..30자)는 정리를 마친 값으로 검사한다.
+    """
+    cleaned: list[str] = []
+    for tag in tags:
+        try:
+            # JSON의 짝 없는 서로게이트("\ud800")는 UTF-8로 저장·응답할 수 없다.
+            tag.encode("utf-8")
+        except UnicodeEncodeError:
+            raise ValueError("태그에 사용할 수 없는 문자가 있습니다") from None
+        tag = tag.strip().lower()
+        if not 1 <= len(tag) <= MAX_TAG_LENGTH:
+            raise ValueError("태그는 각 1~30자여야 합니다")
+        if tag not in cleaned:
+            cleaned.append(tag)
+    if len(cleaned) > MAX_TAGS:
+        raise ValueError("태그는 최대 20개입니다")
+    return cleaned
+
+
+def _title_not_blank(value: str) -> str:
+    """공백만 있는 제목은 비어 있는 것으로 본다. 통과한 값은 받은 그대로 저장한다."""
+    if not value.strip():
+        raise ValueError("제목이 비어 있습니다")
+    return value
+
+
 class NoteCreate(BaseModel):
     kind: NoteKind
     title: str = Field(min_length=1, max_length=200)
     body: str = Field(default="", max_length=50000)
-    tags: list[str] = Field(default_factory=list, max_length=20)
-    is_open: bool = False
+    tags: list[str] = Field(default_factory=list)
+    is_open: bool = Field(default=False, strict=True)
+
+    _check_title = field_validator("title")(_title_not_blank)
+    _check_tags = field_validator("tags")(_clean_tags)
 
 
 class NoteUpdate(BaseModel):
-    kind: NoteKind | None = None
-    title: str | None = Field(default=None, min_length=1, max_length=200)
-    body: str | None = Field(default=None, max_length=50000)
-    tags: list[str] | None = Field(default=None, max_length=20)
-    is_open: bool | None = None
+    # 보낸 필드만 수정한다(exclude_unset). 다섯 필드 모두 null을 허용하지 않아 기본값을 None으로
+    # 두되 타입은 non-null로 선언한다(null을 보내면 422, 생략하면 변경 없음).
+    kind: NoteKind = Field(default=None)
+    title: str = Field(default=None, min_length=1, max_length=200)
+    body: str = Field(default=None, max_length=50000)
+    tags: list[str] = Field(default=None)
+    is_open: bool = Field(default=None, strict=True)
+
+    _check_title = field_validator("title")(_title_not_blank)
+    _check_tags = field_validator("tags")(_clean_tags)
 
 
 class NoteOut(_OutModel):

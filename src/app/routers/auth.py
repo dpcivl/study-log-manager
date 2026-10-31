@@ -38,8 +38,12 @@ def login(payload: LoginRequest, request: Request, response: Response) -> None:
 
     # APP_PASSWORD가 비어 있으면 어떤 입력도 통과시키지 않는다.
     expected = settings.app_password.encode("utf-8")
-    given = payload.password.encode("utf-8")
-    if not expected or not hmac.compare_digest(expected, given):
+    try:
+        given = payload.password.encode("utf-8")
+    except UnicodeEncodeError:
+        # 짝 없는 서로게이트 등 인코딩할 수 없는 입력은 틀린 비밀번호로 본다(시도는 이미 셌다).
+        given = None
+    if not expected or given is None or not hmac.compare_digest(expected, given):
         raise APIError(401, "invalid_password", "비밀번호가 올바르지 않습니다")
 
     limiter.reset(ip)

@@ -68,6 +68,12 @@
       <ul id="session-list" class="record-list"></ul>
       <button id="session-more" class="btn btn-secondary btn-more" type="button" hidden>더 보기</button>
     </section>
+    <section id="notes" class="section" aria-labelledby="notes-title" hidden>
+      <h2 id="notes-title">노트</h2>
+      <div class="page-actions"><!-- F3: 필터 바와 노트 목록은 F4에서 만든다 -->
+        <a id="new-note-btn" class="btn btn-primary" href="/subjects/{{ subject_id }}/notes/new">새 노트</a>
+      </div>
+    </section>
   </div>
 </section>
 {% endblock %}

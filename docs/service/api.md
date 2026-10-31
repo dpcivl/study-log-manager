@@ -7,6 +7,7 @@
 - 본문이 있는 POST·PATCH는 `Content-Type: application/json`이어야 한다. 아니면 `415 {"error":{"code":"unsupported_media_type","message":"JSON 형식으로 보내야 합니다"}}`.
 - 날짜는 `YYYY-MM-DD`, 시각은 ISO 8601 UTC(`2026-10-31T11:20:00Z`).
 - 목록은 `{"items": [...], "total": n, "page": p, "limit": l}` 모양이고 `page`는 1부터, `limit` 기본 20·최대 100.
+- 깨진 JSON과 객체가 아닌 본문은 422 `fields.request`로 돌려준다.
 
 ## 화면(HTML) 주소
 | 주소 | 화면 | 미로그인 시 |
@@ -138,3 +139,46 @@ PATCH 요청 예
 
 ### F2 PATCH /api/sessions/{id}, DELETE /api/sessions/{id}
 PATCH 요청 `{ "minutes": 60 }` → 200 StudySession. DELETE → 204. 없으면 404 not_found.
+
+## F3 노트 작성·보기·수정·삭제
+
+| 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
+|---|---|---|---|---|---|
+| F3 | POST | /api/subjects/{id}/notes | `{kind, title, body?, tags?, is_open?}` | 201 Note | 404 / 422 |
+| F3 | GET | /api/notes/{id} | 없음 | 200 Note | 404 |
+| F3 | PATCH | /api/notes/{id} | `{kind?, title?, body?, tags?, is_open?}` | 200 Note | 404 / 422 |
+| F3 | DELETE | /api/notes/{id} | 없음 | 204 | 404 |
+
+### F3 POST /api/subjects/{id}/notes
+요청
+```json
+{
+  "kind": "remember",
+  "title": "csv 저장 시 인덱스 제외",
+  "body": "인덱스를 제외하고 저장하려면 index=False\n\n```python\ndf.to_csv('cafe.csv', index=False)\n```",
+  "tags": ["pandas", "csv"],
+  "is_open": false
+}
+```
+성공 201
+```json
+{
+  "id": 7,
+  "subject_id": 1,
+  "kind": "remember",
+  "title": "csv 저장 시 인덱스 제외",
+  "body": "인덱스를 제외하고 저장하려면 index=False\n\n```python\ndf.to_csv('cafe.csv', index=False)\n```",
+  "tags": ["pandas", "csv"],
+  "is_open": false,
+  "created_at": "2026-10-31T11:25:00Z",
+  "updated_at": "2026-10-31T11:25:00Z"
+}
+```
+오류 422 예: `fields.kind: "remember, debug, review 중 하나여야 합니다"`, `fields.title: "제목은 1~200자여야 합니다"`, `fields.tags: "태그는 최대 20개, 각 1~30자"`
+
+### F3 GET /api/notes/{id}, PATCH /api/notes/{id}, DELETE /api/notes/{id}
+PATCH 요청 예(미해결 질문에 답을 채움)
+```json
+{ "body": "isna()는 isnull()의 별칭이다. 동작이 같고 R 사용자를 위해 둘 다 둔 것", "is_open": false }
+```
+성공 200: Note 전체(updated_at 갱신). DELETE → 204. 없으면 404 `{"error":{"code":"not_found","message":"노트를 찾을 수 없습니다"}}`

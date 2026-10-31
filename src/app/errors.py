@@ -48,6 +48,11 @@ FIELD_MESSAGES: dict[str, str] = {
     "studied_on": "날짜는 YYYY-MM-DD 형식이어야 합니다",
     "minutes": "1~1440 사이여야 합니다",
     "memo": "메모는 500자 이하여야 합니다",
+    # F3 Note
+    "kind": "remember, debug, review 중 하나여야 합니다",
+    "title": "제목은 1~200자여야 합니다",
+    "body": "본문은 50,000자 이내여야 합니다",
+    "tags": "태그는 최대 20개, 각 1~30자",
     # 목록 쿼리(F2부터 쓴다)
     "page": "1 이상의 정수여야 합니다",
     "limit": "1~100 사이의 정수여야 합니다",
@@ -57,6 +62,7 @@ FIELD_MESSAGES: dict[str, str] = {
 NOT_FOUND_MESSAGES: dict[str, str] = {
     "subject_id": "주제를 찾을 수 없습니다",
     "session_id": "기록을 찾을 수 없습니다",
+    "note_id": "노트를 찾을 수 없습니다",
 }
 
 
@@ -65,6 +71,9 @@ def not_found(param: str) -> APIError:
     return APIError(404, "not_found", NOT_FOUND_MESSAGES[param])
 
 
+# 요청 본문 전체가 잘못됐을 때(깨진 JSON, 객체가 아님)의 fields 키. 어떤 필드 이름과도 겹치지 않게
+# 한다(Note의 body 필드와 구분).
+REQUEST_FIELD = "request"
 BODY_INVALID_MESSAGE = "요청 본문이 올바른 JSON 객체가 아닙니다"
 REQUIRED_MESSAGE = "필수 항목입니다"
 INVALID_MESSAGE = "올바른 값이 아닙니다"
@@ -74,10 +83,13 @@ def validation_fields(errors: list[dict]) -> dict[str, str]:
     """Pydantic 오류 목록을 {필드명: 문구}로 바꾼다. 필드마다 첫 오류만 쓴다."""
     fields: dict[str, str] = {}
     for err in errors:
-        loc = [p for p in err.get("loc", ()) if p not in ("body", "query", "path")]
+        loc = list(err.get("loc", ()))
+        # 첫 원소는 오류 위치(body·query·path)다. 그것만 떼고, 필드 이름 "body"는 남긴다.
+        if loc and loc[0] in ("body", "query", "path"):
+            loc = loc[1:]
         if not loc or not isinstance(loc[0], str):
             # 깨진 JSON, 객체가 아닌 본문 등 필드를 특정할 수 없는 경우
-            key, default = "body", BODY_INVALID_MESSAGE
+            key, default = REQUEST_FIELD, BODY_INVALID_MESSAGE
         else:
             key = loc[0]
             default = REQUIRED_MESSAGE if err.get("type") == "missing" else INVALID_MESSAGE

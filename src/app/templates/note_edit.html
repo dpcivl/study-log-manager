@@ -1,6 +1,53 @@
 {% extends "base.html" %}
+{% block title %}노트 편집 - Study Log{% endblock %}
+{% block head %}{% include "_markdown_head.html" %}{% endblock %}
 {% block content %}
-<!-- S4 노트 편집(작성·수정 공용). mockup/index.html의 S4 부분을 옮긴다. -->
-<section id="s4" data-subject-id="{{ subject_id if subject_id is not none else '' }}" data-note-id="{{ note_id if note_id is not none else '' }}"></section>
+<!-- S4 노트 편집(작성·수정 공용) -->
+<section id="s4" aria-labelledby="s4-title" data-subject-id="{{ subject_id if subject_id is not none else '' }}" data-note-id="{{ note_id if note_id is not none else '' }}">
+  <header class="topbar">
+    <a id="note-cancel-top" class="back-link" href="{{ '/subjects/%d' % subject_id if subject_id is not none else '/' }}">← 주제</a>
+    <h1 id="s4-title" class="topbar-title">{{ '노트 수정' if note_id is not none else '새 노트' }}</h1>
+  </header>
+  <div class="page">
+    <p id="note-load-error" class="form-error" role="alert" hidden></p>
+    <form id="note-form" class="note-form" novalidate{% if note_id is not none %} hidden{% endif %}><!-- F3 -->
+      <fieldset>
+        <legend>유형</legend>
+        <div class="radio-row">
+          <label><input type="radio" name="kind" value="remember" checked> 기억할 것</label>
+          <label><input type="radio" name="kind" value="debug"> 디버깅</label>
+          <label><input type="radio" name="kind" value="review"> 후기</label>
+        </div>
+        <p id="note-kind-error" class="form-error" role="alert" data-error-for="kind" hidden></p>
+      </fieldset>
+      <div class="field">
+        <label for="note-title">제목</label>
+        <input id="note-title" class="input" type="text" name="title" maxlength="200" aria-describedby="note-title-error">
+        <p id="note-title-error" class="form-error" role="alert" data-error-for="title" hidden></p>
+      </div>
+      <div class="field">
+        <label for="note-tags">태그 (쉼표로 구분)</label>
+        <input id="note-tags" class="input" type="text" name="tags" placeholder="예: pandas, csv" aria-describedby="note-tags-error">
+        <p id="note-tags-error" class="form-error" role="alert" data-error-for="tags" hidden></p>
+      </div>
+      <label class="check"><input id="note-open" type="checkbox" name="is_open"> 미해결 (답을 아직 못 채운 질문)</label>
+      <div class="field">
+        <div class="body-head">
+          <label for="note-body">본문 (마크다운)</label>
+          <button id="preview-toggle" class="btn btn-secondary" type="button" aria-pressed="false">미리보기</button>
+        </div>
+        <textarea id="note-body" class="input" name="body" maxlength="50000" aria-describedby="note-body-error"></textarea>
+        <div id="note-preview" class="preview-box" hidden></div>
+        <p id="note-body-error" class="form-error" role="alert" data-error-for="body" hidden></p>
+        <p id="body-counter" class="counter">0 / 50,000자</p>
+      </div>
+      <p id="note-form-error" class="form-error" role="alert" data-error-for="form" hidden></p>
+      <div class="form-actions">
+        <button class="btn btn-primary" type="submit">저장</button>
+        <a id="note-cancel" class="btn btn-secondary" href="{{ '/subjects/%d' % subject_id if subject_id is not none else '/' }}">취소</a>
+      </div>
+    </form>
+  </div>
+</section>
 {% endblock %}
-{% block scripts %}<script type="module" src="/static/js/note_edit.js"></script>{% endblock %}
+{% block scripts %}{% include "_markdown_scripts.html" %}<script type="module" src="/static/js/note_edit.js"></script>{% endblock %}

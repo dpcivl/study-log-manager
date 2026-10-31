@@ -1,6 +1,25 @@
 {% extends "base.html" %}
+{% block title %}노트 - Study Log{% endblock %}
+{% block head %}{% include "_markdown_head.html" %}{% endblock %}
 {% block content %}
-<!-- S5 노트 보기. mockup/index.html의 S5 부분을 옮긴다. -->
-<section id="s5" data-note-id="{{ note_id }}"></section>
+<!-- S5 -->
+<section id="s5" aria-labelledby="s5-title" data-note-id="{{ note_id }}">
+  <header class="topbar">
+    <a id="note-back" class="back-link" href="/">← 주제</a>
+  </header>
+  <div class="page">
+    <article class="note-view">
+      <h2 id="s5-title"></h2>
+      <div id="note-view-meta" class="note-meta"></div>
+      <p id="note-view-dates" class="note-dates"></p>
+      <div id="note-view-body" class="note-content"></div><!-- F3 -->
+      <p id="note-view-error" class="form-error" role="alert" hidden></p>
+      <div id="note-view-actions" class="form-actions" hidden>
+        <a id="note-edit-btn" class="btn btn-secondary" href="/notes/{{ note_id }}/edit">수정</a>
+        <button id="note-delete-btn" class="btn btn-danger" type="button">삭제</button>
+      </div>
+    </article>
+  </div>
+</section>
 {% endblock %}
-{% block scripts %}<script type="module" src="/static/js/note.js"></script>{% endblock %}
+{% block scripts %}{% include "_markdown_scripts.html" %}<script type="module" src="/static/js/note.js"></script>{% endblock %}
