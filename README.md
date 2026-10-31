@@ -13,9 +13,11 @@
 - F4 노트 검색·필터
 - F5 비밀번호 로그인
 - F6 마크다운 내보내기
+- 초기 데이터 시드 스크립트
 
 ## 문서
 - [기능 현황](docs/service/features.md)
 - [API](docs/service/api.md)
 - [실행과 백업](docs/service/running.md)
+- [구현 전체 정리](docs/impl-reports/SUMMARY.md)
 - [설계 문서](docs/design.md)

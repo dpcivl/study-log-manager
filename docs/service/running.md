@@ -50,3 +50,11 @@ uvicorn app.main:app --app-dir src --host 127.0.0.1 --port 8000 --proxy-headers 
   ```
 - 서버가 도는 중에 복사하면 쓰는 중인 내용이 빠질 수 있으므로 멈춘 뒤에 복사한다.
 - 복원은 서버를 멈춘 뒤 백업 파일을 `data/study.db`로 덮어쓰고 다시 실행한다.
+
+## 4. 초기 데이터 넣기 (시드)
+처음 써 볼 때 샘플 데이터(주제 1개, 공부 기록 4건, 노트 6건)를 넣는다.
+반드시 프로젝트 폴더에서 실행한다. 앱과 같은 `.env`의 DB에 넣기 때문이다.
+```bash
+source .venv/bin/activate && python scripts/seed_bigdata.py
+```
+- 같은 이름의 주제가 이미 있으면 아무것도 바꾸지 않고 끝난다.
