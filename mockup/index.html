@@ -1019,6 +1019,42 @@
     localStorage.setItem(SESSION_KEY, String(Date.now())); // 204 + Set-Cookie
     location.hash = '#s2';
   });
+  // F6: GET /api/subjects/{id}/export 흉내. 마크다운을 만들어 Blob으로 내려받게 한다.
+  function buildExport(sub) {
+    var out = ['# 베이스', sub.background || '', '', '# 기간', '- 시작: ' + sub.started_on,
+      '- 목표: ' + (sub.target_date || '(없음)'), '', '# 공부 기록'];
+    subjectSessions().slice().reverse().forEach(function (x) { // 날짜 오름차순
+      var d = x.studied_on.split('-');
+      out.push('- ' + Number(d[1]) + '월 ' + Number(d[2]) + '일: ' + formatHours(x.minutes));
+    });
+    var mine = subjectNotes().slice().sort(function (p, q) { // 생성 오름차순
+      return p.created_at < q.created_at ? -1 : p.created_at > q.created_at ? 1 : p.id - q.id;
+    });
+    [['remember', '기억할 것'], ['debug', '디버깅'], ['review', '후기']].forEach(function (k) {
+      out.push('', '# ' + k[1]);
+      mine.filter(function (n) { return n.kind === k[0]; }).forEach(function (n) {
+        out.push('## ' + n.title + (n.is_open ? ' (미해결)' : ''));
+        if (n.tags.length) out.push('태그: ' + n.tags.join(', '), '');
+        if (n.body) out.push(n.body);
+        out.push('');
+      });
+    });
+    return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\n+$/, '') + '\n';
+  }
+  function exportFilename(name) { // 경로 문자(/, \, ..) 제거
+    return (name.replace(/\.\./g, '').replace(/[\/\\]/g, '').trim() || 'subject') + '.md';
+  }
+  document.getElementById('export-btn').addEventListener('click', function () {
+    var sub = currentSubject();
+    var blob = new Blob([buildExport(sub)], { type: 'text/markdown;charset=utf-8' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = exportFilename(sub.name);
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(function () { URL.revokeObjectURL(a.href); }, 1000);
+  });
   document.getElementById('logout-btn').addEventListener('click', function () { // POST /api/logout → 204
     localStorage.removeItem(SESSION_KEY);
   });
