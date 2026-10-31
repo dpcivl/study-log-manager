@@ -8,6 +8,7 @@
 - 날짜는 `YYYY-MM-DD`, 시각은 ISO 8601 UTC(`2026-10-31T11:20:00Z`).
 - 목록은 `{"items": [...], "total": n, "page": p, "limit": l}` 모양이고 `page`는 1부터, `limit` 기본 20·최대 100.
 - 깨진 JSON과 객체가 아닌 본문은 422 `fields.request`로 돌려준다.
+- 처리되지 않은 예외는 500 `internal_error`로 돌려준다.
 
 ## 화면(HTML) 주소
 | 주소 | 화면 | 미로그인 시 |
@@ -182,3 +183,38 @@ PATCH 요청 예(미해결 질문에 답을 채움)
 { "body": "isna()는 isnull()의 별칭이다. 동작이 같고 R 사용자를 위해 둘 다 둔 것", "is_open": false }
 ```
 성공 200: Note 전체(updated_at 갱신). DELETE → 204. 없으면 404 `{"error":{"code":"not_found","message":"노트를 찾을 수 없습니다"}}`
+
+## F4 노트 검색·필터
+
+| 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
+|---|---|---|---|---|---|
+| F4 | GET | /api/subjects/{id}/notes?kind&tag&q&open&page&limit | 쿼리만 | 200 목록(updated_at desc) + `tags`(이 주제의 태그 전부) | 404 / 422 |
+
+### F4 GET /api/subjects/{id}/notes
+쿼리: `kind`(remember|debug|review), `tag`(정확히 일치, 여러 개면 `tag=a&tag=b` 모두 포함), `q`(제목·본문 부분 일치, 대소문자 무시), `open`(true면 is_open=true만), `page`, `limit`. 조건은 AND.
+
+예: `GET /api/subjects/1/notes?kind=remember&open=true&q=isna`
+```json
+{
+  "items": [
+    {
+      "id": 8,
+      "subject_id": 1,
+      "kind": "remember",
+      "title": "DataFrame의 isnull()과 isna()가 다른 이유?",
+      "body": "",
+      "tags": ["pandas"],
+      "is_open": true,
+      "created_at": "2026-10-28T13:10:00Z",
+      "updated_at": "2026-10-28T13:10:00Z"
+    }
+  ],
+  "total": 1,
+  "page": 1,
+  "limit": 20,
+  "tags": ["csv", "pandas", "datetime"]
+}
+```
+`tags`는 필터와 무관하게 이 주제 노트의 모든 태그(중복 제거, 가나다·알파벳순)이다. `kind`가 세 값 밖이면 422.
+
+`q`는 앞뒤 공백을 지운 뒤 200자 이내, `tag`는 최대 20개이고 각 1~30자다. 벗어나면 422다.

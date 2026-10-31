@@ -111,7 +111,9 @@ def test_f5_엉터리_session_쿠키는_401(client, cookie):
 def test_f5_변조한_session_쿠키는_401(auth_client):
     token = auth_client.cookies.get("session")
     assert token
-    tampered = token[:-1] + ("A" if token[-1] != "A" else "B")
+    # 마지막 글자는 base64에서 쓰이지 않는 비트가 있어 바꿔도 디코딩 결과가 같을 수 있다.
+    # 항상 값이 바뀌도록 끝에서 두 번째 글자를 바꾼다.
+    tampered = token[:-2] + ("A" if token[-2] != "A" else "B") + token[-1]
     response = TestClient(auth_client.app).get(
         "/api/subjects", headers={"Cookie": f"session={tampered}"}
     )

@@ -1,12 +1,13 @@
 """F3 /api/subjects/{id}/notes(POST), /api/notes/{id} / F4 /api/subjects/{id}/notes(GET)"""
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from sqlalchemy import exists, func, or_, select, true
 from sqlalchemy.orm import Session
 
 from app.auth import require_session
 from app.db import get_db
-from app.deps import IdPath, get_subject_or_404
-from app.errors import NotImplementedAPIError, not_found
+from app.deps import IdPath, fetch_page, get_subject_or_404
+from app.errors import APIError, not_found
 from app.models import Note, utcnow
 from app.schemas import NoteCreate, NoteKind, NoteList, NoteOut, NoteUpdate
 
@@ -20,9 +21,36 @@ def _get_note_or_404(db: Session, note_id: int) -> Note:
     return note
 
 
+MAX_QUERY_LENGTH = 200
+MAX_TAG_FILTERS = 20
+MAX_TAG_LENGTH = 30
+QUERY_INVALID_MESSAGE = "검색어는 200자 이내여야 합니다"
+TAG_FILTER_INVALID_MESSAGE = "태그 조건은 최대 20개, 각 1~30자입니다"
+
+
+def _validate_filters(tag: list[str] | None, q: str | None) -> str:
+    """검색어(앞뒤 공백 제거, 200자 이내, NUL 없음)와 태그 조건(최대 20개, 각 1~30자)을 검사한다.
+    벗어나면 422 fields.q / fields.tag. 통과하면 다듬은 검색어를 돌려준다."""
+    fields: dict[str, str] = {}
+    keyword = (q or "").strip()
+    if len(keyword) > MAX_QUERY_LENGTH or "\x00" in keyword:
+        fields["q"] = QUERY_INVALID_MESSAGE
+    if tag and (len(tag) > MAX_TAG_FILTERS or any(not 1 <= len(t) <= MAX_TAG_LENGTH for t in tag)):
+        fields["tag"] = TAG_FILTER_INVALID_MESSAGE
+    if fields:
+        raise APIError(422, "validation_error", "입력값을 확인하세요", fields=fields)
+    return keyword
+
+
+def _like_pattern(text: str) -> str:
+    """부분 일치용 LIKE 패턴. %, _, \\는 글자 그대로 찾도록 이스케이프한다(escape="\\")."""
+    escaped = text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 @router.get("/subjects/{subject_id}/notes", response_model=NoteList)
 def list_notes(
-    subject_id: int,
+    subject_id: IdPath,
     kind: NoteKind | None = Query(default=None),
     tag: list[str] | None = Query(default=None),
     q: str | None = Query(default=None),
@@ -31,8 +59,47 @@ def list_notes(
     limit: int = Query(default=20, ge=1, le=100),
     db: Session = Depends(get_db),
 ) -> NoteList:
-    # F4: 200 목록(updated_at desc) + tags(이 주제의 태그 전부) / 404 / 422(kind가 세 값 밖)
-    raise NotImplementedAPIError()
+    # F4: 200 목록(updated_at desc, 같으면 id desc) + tags(이 주제의 태그 전부) / 404 / 422
+    keyword = _validate_filters(tag, q)
+    get_subject_or_404(db, subject_id)
+    conditions = [Note.subject_id == subject_id]
+    if kind is not None:
+        conditions.append(Note.kind == kind)
+    if open:  # open=false나 생략은 조건이 없다
+        conditions.append(Note.is_open.is_(True))
+    for name in dict.fromkeys(tag or []):  # tags는 JSON 배열: 원소가 정확히 같은 노트만
+        tag_values = func.json_each(Note.tags).table_valued("value")
+        conditions.append(exists().where(tag_values.c.value == name))
+    if keyword:
+        pattern = _like_pattern(keyword)
+        conditions.append(
+            or_(Note.title.like(pattern, escape="\\"), Note.body.like(pattern, escape="\\"))
+        )
+
+    total = db.scalar(select(func.count(Note.id)).where(*conditions)) or 0
+    items = fetch_page(
+        db,
+        select(Note).where(*conditions).order_by(Note.updated_at.desc(), Note.id.desc()),
+        page,
+        limit,
+    )
+    # 태그 목록은 필터와 무관하게 이 주제 노트 전체에서 모은다.
+    all_tags = func.json_each(Note.tags).table_valued("value")
+    tag_query = (
+        select(all_tags.c.value)
+        .select_from(Note)
+        .join(all_tags, true())
+        .where(Note.subject_id == subject_id)
+        .distinct()
+    )
+    tags = sorted(db.scalars(tag_query))
+    return NoteList(
+        items=[NoteOut.model_validate(n) for n in items],
+        total=int(total),
+        page=page,
+        limit=limit,
+        tags=tags,
+    )
 
 
 @router.post(

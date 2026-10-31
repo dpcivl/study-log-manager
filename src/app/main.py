@@ -1,5 +1,6 @@
 """FastAPI 앱 생성, 라우터 등록, 예외 핸들러(오류 응답 모양)."""
 
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -15,6 +16,8 @@ from app.db import Base, make_engine, make_session_factory
 from app.errors import NOT_FOUND_MESSAGES, APIError, validation_fields
 from app.routers import auth, export, notes, pages, sessions, subjects
 from app.settings import Settings, get_settings
+
+logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -98,6 +101,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if exc.status_code == 415:
             return _error_response(415, "unsupported_media_type", "JSON 형식으로 보내야 합니다")
         return _error_response(exc.status_code, "http_error", str(exc.detail))
+
+    @app.exception_handler(Exception)
+    async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+        # 내부 정보는 응답에 넣지 않고 서버 로그에만 남긴다.
+        logger.error("처리되지 않은 예외: %s %s", request.method, request.url.path, exc_info=exc)
+        return _error_response(500, "internal_error", "서버 오류가 발생했습니다")
 
     return app
 

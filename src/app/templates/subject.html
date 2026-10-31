@@ -70,9 +70,19 @@
     </section>
     <section id="notes" class="section" aria-labelledby="notes-title" hidden>
       <h2 id="notes-title">노트</h2>
-      <div class="page-actions"><!-- F3: 필터 바와 노트 목록은 F4에서 만든다 -->
-        <a id="new-note-btn" class="btn btn-primary" href="/subjects/{{ subject_id }}/notes/new">새 노트</a>
+      <div class="page-actions">
+        <a id="new-note-btn" class="btn btn-primary" href="/subjects/{{ subject_id }}/notes/new">새 노트</a><!-- F3 -->
       </div>
+      <div class="filter-bar"><!-- F4 -->
+        <div id="kind-tabs" class="tabs" role="group" aria-label="유형"></div>
+        <label class="check"><input id="open-only" type="checkbox"> 미해결만</label>
+        <div id="tag-chips" class="chips" role="group" aria-label="태그"></div>
+        <input id="note-search" class="input" type="search" maxlength="200" placeholder="제목·본문 검색" aria-label="검색어">
+      </div>
+      <p id="note-list-error" class="form-error" role="alert" hidden></p>
+      <ul id="note-list" class="note-list"></ul>
+      <p id="note-empty" class="empty-state" hidden>조건에 맞는 노트가 없습니다</p>
+      <button id="note-more" class="btn btn-secondary btn-more" type="button" hidden>더 보기</button>
     </section>
   </div>
 </section>

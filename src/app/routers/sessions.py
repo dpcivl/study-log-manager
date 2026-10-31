@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.auth import require_session
 from app.db import get_db
-from app.deps import IdPath, get_subject_or_404
+from app.deps import IdPath, fetch_page, get_subject_or_404
 from app.errors import not_found
 from app.models import StudySession
 from app.schemas import (
@@ -17,9 +17,6 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/api", tags=["F2"], dependencies=[Depends(require_session)])
-
-# SQLite OFFSET이 다룰 수 있는 범위. 넘으면 그 페이지는 비어 있다.
-_MAX_OFFSET = 2**62
 
 
 def _get_session_or_404(db: Session, session_id: int) -> StudySession:
@@ -43,18 +40,14 @@ def list_sessions(
             StudySession.subject_id == subject_id
         )
     ).one()
-    offset = (page - 1) * limit
-    items: list[StudySession] = []
-    if offset < _MAX_OFFSET:
-        items = list(
-            db.scalars(
-                select(StudySession)
-                .where(StudySession.subject_id == subject_id)
-                .order_by(StudySession.studied_on.desc(), StudySession.id.desc())
-                .offset(offset)
-                .limit(limit)
-            )
-        )
+    items = fetch_page(
+        db,
+        select(StudySession)
+        .where(StudySession.subject_id == subject_id)
+        .order_by(StudySession.studied_on.desc(), StudySession.id.desc()),
+        page,
+        limit,
+    )
     return StudySessionList(
         items=[StudySessionOut.model_validate(s) for s in items],
         total=int(total),
