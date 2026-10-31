@@ -96,6 +96,113 @@
   .login-card h1 { margin: 0; font-size: 24px; line-height: 1.25; letter-spacing: -0.01em; }
   .login-form { display: flex; flex-direction: column; gap: 16px; }
   .login-form .btn { width: 100%; }
+
+  /* 주제 목록 화면 */
+  .btn-secondary { background: transparent; color: var(--ink); border-color: var(--line-strong); }
+  .btn-secondary:hover { background: var(--bg); }
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 8px 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar .app-name { margin: 0; font-size: 18px; font-weight: 700; }
+  .topbar .btn { display: inline-flex; align-items: center; text-decoration: none; }
+  .page { max-width: 720px; margin: 0 auto; padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+  .page-actions { display: flex; }
+  .topic-form {
+    display: flex; flex-direction: column; gap: 12px; padding: 16px;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .topic-form .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .topic-form textarea.input { min-height: 88px; resize: vertical; }
+  .form-actions { display: flex; gap: 8px; }
+  .topic-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+  .topic-card {
+    display: block; padding: 16px; color: inherit; text-decoration: none;
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  }
+  .topic-card:hover { border-color: var(--accent); }
+  .topic-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .topic-card h2 { margin: 0 0 4px; font-size: 18px; line-height: 1.3; }
+  .topic-meta { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 14px; color: var(--muted); }
+  .topic-stats { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 16px; margin-top: 12px; font-size: 14px; }
+  .topic-stats .hours { font-size: 20px; font-weight: 700; color: var(--accent); }
+  .badge-open { padding: 2px 8px; border-radius: 999px; border: 1px solid var(--danger); color: var(--danger); font-size: 13px; font-weight: 600; }
+  .empty-state { margin: 0; padding: 40px 16px; text-align: center; color: var(--muted); background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); }
+  @media (max-width: 480px) { .topic-form .row { grid-template-columns: 1fr; } }
+
+  /* 주제 상세 화면 */
+  .topbar .back-link { color: var(--accent); text-decoration: none; font-weight: 600; white-space: nowrap; }
+  .topbar .topbar-title { margin: 0; flex: 1; min-width: 0; font-size: 18px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .topbar-actions { display: flex; gap: 8px; }
+  .summary { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0; font-size: 14px; color: var(--muted); }
+  .summary strong { color: var(--ink); }
+  .background-text { margin: 0; white-space: pre-wrap; color: var(--muted); }
+  .section { display: flex; flex-direction: column; gap: 12px; }
+  .section h2 { margin: 0; font-size: 18px; }
+  .quick-add { display: grid; grid-template-columns: 1fr 120px; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .quick-add .field-memo, .quick-add .form-error, .quick-add .btn { grid-column: 1 / -1; }
+  .record-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .record { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .record .date { font-weight: 600; }
+  .record .dur { color: var(--accent); font-weight: 700; }
+  .record .memo { flex: 1; min-width: 80px; color: var(--muted); font-size: 14px; }
+  .record .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+  .record-edit { display: grid; grid-template-columns: 1fr 100px; gap: 8px; width: 100%; }
+  .record-edit .memo-input, .record-edit .form-actions, .record-edit .form-error { grid-column: 1 / -1; }
+  .btn-more { align-self: center; }
+  .filter-bar { display: flex; flex-direction: column; gap: 12px; padding: 12px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .tabs, .chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tab, .chip { min-height: 36px; padding: 4px 12px; border: 1px solid var(--line-strong); border-radius: 999px; background: transparent; color: var(--ink); font: inherit; font-size: 14px; cursor: pointer; }
+  .tab[aria-pressed="true"], .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+  .check { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; font-size: 14px; }
+  .note-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .note-item { display: block; padding: 12px 16px; color: inherit; text-decoration: none; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .note-item:hover { border-color: var(--accent); }
+  .note-item h3 { margin: 0 0 6px; font-size: 16px; }
+  .note-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; font-size: 13px; color: var(--muted); }
+  .badge-kind { padding: 2px 8px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line-strong); font-size: 13px; }
+  .tag { padding: 2px 8px; border-radius: 6px; background: var(--bg); font-size: 13px; }
+
+  /* 노트 편집 화면 */
+  .note-form { display: flex; flex-direction: column; gap: 16px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .note-form fieldset { margin: 0; padding: 0; border: 0; min-width: 0; }
+  .note-form legend { padding: 0; margin-bottom: 6px; font-size: 14px; font-weight: 600; }
+  .radio-row { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+  .radio-row label { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; }
+  .body-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .body-head label { font-size: 14px; font-weight: 600; }
+  .body-head .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+  .note-form textarea.input { min-height: 280px; resize: vertical; font-family: var(--mono); font-size: 14px; line-height: 1.6; }
+  .preview-box { min-height: 280px; padding: 10px 12px; border: 1px dashed var(--line-strong); border-radius: var(--radius); overflow-wrap: anywhere; line-height: 1.7; }
+  .counter { margin: 0; font-size: 13px; color: var(--muted); text-align: right; }
+
+  /* 노트 보기 화면 */
+  .note-view { display: flex; flex-direction: column; gap: 12px; padding: 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+  .note-view h2 { margin: 0; font-size: 22px; line-height: 1.3; overflow-wrap: anywhere; }
+  .note-view .note-dates { display: flex; flex-wrap: wrap; gap: 4px 12px; margin: 0; font-size: 13px; color: var(--muted); }
+  .note-content { margin: 0; overflow-wrap: anywhere; font-size: 16px; line-height: 1.7; }
+  .note-content h1, .note-content h2, .note-content h3, .preview-box h1, .preview-box h2, .preview-box h3 { margin: 16px 0 6px; line-height: 1.3; }
+  .note-content h1, .preview-box h1 { font-size: 20px; }
+  .note-content h2, .preview-box h2 { font-size: 18px; }
+  .note-content h3, .preview-box h3 { font-size: 16px; }
+  .note-content p, .preview-box p { margin: 0 0 10px; }
+  .note-content ul, .note-content ol, .preview-box ul, .preview-box ol { margin: 0 0 10px; padding-left: 22px; }
+  .note-content code, .preview-box code { font-family: var(--mono); font-size: 0.9em; padding: 1px 5px; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; }
+  .note-content pre, .preview-box pre { margin: 0 0 12px; padding: 12px; overflow-x: auto; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+  .note-content pre code, .preview-box pre code { padding: 0; border: 0; background: none; font-size: 14px; line-height: 1.6; }
+  .hl-kw { color: #8250df; font-weight: 600; }
+  .hl-str { color: #0a7a3d; }
+  .hl-com { color: var(--muted); font-style: italic; }
+  .hl-num { color: #b35900; }
+  @media (prefers-color-scheme: dark) { .hl-kw { color: #c9a7ff; } .hl-str { color: #7ee2a0; } .hl-num { color: #ffb86b; } }
+  .btn-danger { background: transparent; color: var(--danger); border-color: var(--danger); }
+  .btn-danger:hover { background: var(--bg); }
+  .topbar-actions .btn, .note-view .form-actions .btn { text-decoration: none; display: inline-flex; align-items: center; }
 </style>
 </head>
 <body>
@@ -105,6 +212,7 @@
   <section id="s1" class="screen-login" aria-labelledby="s1-title">
     <div class="login-card">
       <h1 id="s1-title">Study Log</h1>
+      <!-- F5 -->
       <form id="login-form" class="login-form" novalidate>
         <div class="field">
           <label for="login-password">비밀번호</label>
@@ -119,11 +227,800 @@
     </div>
   </section>
 
+  <!-- S2 -->
+  <section id="s2" hidden aria-labelledby="s2-title">
+    <header class="topbar">
+      <h1 id="s2-title" class="app-name">Study Log</h1>
+      <a id="logout-btn" class="btn btn-secondary" href="#s1">로그아웃</a>
+    </header>
+    <div class="page">
+      <div class="page-actions">
+        <button id="new-topic-btn" class="btn btn-primary" type="button" aria-expanded="false" aria-controls="topic-form">새 주제</button>
+      </div>
+      <form id="topic-form" class="topic-form" hidden novalidate>
+        <div class="field"><!-- F1 -->
+          <label for="topic-name">이름 (필수)</label>
+          <input id="topic-name" class="input" type="text" name="name" maxlength="100" aria-describedby="topic-name-error">
+          <p id="topic-name-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="topic-started">시작일</label>
+            <input id="topic-started" class="input" type="date" name="started_on">
+          </div>
+          <div class="field">
+            <label for="topic-target">목표일 (선택)</label>
+            <input id="topic-target" class="input" type="date" name="target_date">
+          </div>
+        </div>
+        <div class="field">
+          <label for="topic-background">배경 (선택)</label>
+          <textarea id="topic-background" class="input" name="background" maxlength="5000"></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">만들기</button>
+          <button id="topic-cancel" class="btn btn-secondary" type="button">취소</button>
+        </div>
+      </form>
+      <ul id="topic-list" class="topic-list"></ul>
+      <p id="topic-empty" class="empty-state" hidden>첫 학습 주제를 만들어 보세요</p>
+    </div>
+  </section>
+
+  <!-- S3 -->
+  <section id="s3" hidden aria-labelledby="s3-title">
+    <header class="topbar">
+      <a class="back-link" href="#s2">← 주제 목록</a>
+      <h1 id="s3-title" class="topbar-title"></h1>
+      <div class="topbar-actions">
+        <button id="subject-edit-btn" class="btn btn-secondary" type="button">편집</button>
+        <button id="export-btn" class="btn btn-secondary" type="button">내보내기</button><!-- F6 -->
+      </div>
+    </header>
+    <div class="page">
+      <form id="subject-edit-form" class="topic-form" hidden novalidate>
+        <div class="field"><!-- F1 -->
+          <label for="edit-name">이름</label>
+          <input id="edit-name" class="input" type="text" name="name" maxlength="100" aria-describedby="edit-name-error">
+          <p id="edit-name-error" class="form-error" role="alert" hidden></p>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="edit-started">시작일</label>
+            <input id="edit-started" class="input" type="date" name="started_on">
+          </div>
+          <div class="field">
+            <label for="edit-target">목표일</label>
+            <input id="edit-target" class="input" type="date" name="target_date">
+          </div>
+        </div>
+        <div class="field">
+          <label for="edit-background">배경</label>
+          <textarea id="edit-background" class="input" name="background" maxlength="5000"></textarea>
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">저장</button>
+          <button id="subject-edit-cancel" class="btn btn-secondary" type="button">취소</button>
+        </div>
+      </form>
+      <p id="subject-summary" class="summary"></p>
+      <p id="subject-background" class="background-text" hidden></p>
+
+      <section class="section" aria-labelledby="sessions-title">
+        <h2 id="sessions-title">공부 시간</h2>
+        <form id="session-form" class="quick-add" novalidate><!-- F2 -->
+          <div class="field">
+            <label for="session-date">날짜</label>
+            <input id="session-date" class="input" type="date" name="studied_on">
+          </div>
+          <div class="field">
+            <label for="session-minutes">시간 (분)</label>
+            <input id="session-minutes" class="input" type="number" name="minutes" step="15" value="60">
+          </div>
+          <div class="field field-memo">
+            <label for="session-memo">메모 (선택)</label>
+            <input id="session-memo" class="input" type="text" name="memo" maxlength="500">
+          </div>
+          <p id="session-error" class="form-error" role="alert" hidden></p>
+          <button class="btn btn-primary" type="submit">추가</button>
+        </form>
+        <ul id="session-list" class="record-list"></ul>
+        <button id="session-more" class="btn btn-secondary btn-more" type="button" hidden>더 보기</button>
+      </section>
+
+      <section class="section" aria-labelledby="notes-title">
+        <h2 id="notes-title">노트</h2>
+        <div class="page-actions">
+          <a id="new-note-btn" class="btn btn-primary" href="#s4" style="text-decoration:none;display:inline-flex;align-items:center">새 노트</a>
+        </div>
+        <div class="filter-bar"><!-- F4 -->
+          <div id="kind-tabs" class="tabs" role="group" aria-label="유형"></div>
+          <label class="check"><input id="open-only" type="checkbox"> 미해결만</label>
+          <div id="tag-chips" class="chips" role="group" aria-label="태그"></div>
+          <input id="note-search" class="input" type="search" placeholder="제목·본문 검색" aria-label="검색어">
+        </div>
+        <ul id="note-list" class="note-list"></ul>
+        <p id="note-empty" class="empty-state" hidden>조건에 맞는 노트가 없습니다</p>
+        <button id="note-more" class="btn btn-secondary btn-more" type="button" hidden>더 보기</button>
+      </section>
+    </div>
+  </section>
+
+  <!-- S4 -->
+  <section id="s4" hidden aria-labelledby="s4-title">
+    <header class="topbar">
+      <a id="note-cancel-top" class="back-link" href="#s3">← 주제</a>
+      <h1 id="s4-title" class="topbar-title">노트 편집</h1>
+    </header>
+    <div class="page">
+      <form id="note-form" class="note-form" novalidate><!-- F3 -->
+        <fieldset>
+          <legend>유형</legend>
+          <div class="radio-row">
+            <label><input type="radio" name="kind" value="remember" checked> 기억할 것</label>
+            <label><input type="radio" name="kind" value="debug"> 디버깅</label>
+            <label><input type="radio" name="kind" value="review"> 후기</label>
+          </div>
+        </fieldset>
+        <div class="field">
+          <label for="note-title">제목</label>
+          <input id="note-title" class="input" type="text" maxlength="200" required>
+        </div>
+        <div class="field">
+          <label for="note-tags">태그 (쉼표로 구분)</label>
+          <input id="note-tags" class="input" type="text" placeholder="예: pandas, csv">
+        </div>
+        <label class="check"><input id="note-open" type="checkbox"> 미해결 (답을 아직 못 채운 질문)</label>
+        <div class="field">
+          <div class="body-head">
+            <label for="note-body">본문 (마크다운)</label>
+            <button id="preview-toggle" class="btn btn-secondary" type="button" aria-pressed="false">미리보기</button>
+          </div>
+          <textarea id="note-body" class="input" maxlength="50000"></textarea>
+          <div id="note-preview" class="preview-box" hidden></div>
+          <p id="body-counter" class="counter">0 / 50,000자</p>
+        </div>
+        <p id="note-error" class="form-error" role="alert" hidden></p>
+        <div class="form-actions">
+          <button class="btn btn-primary" type="submit">저장</button>
+          <a id="note-cancel" class="btn btn-secondary" href="#s3" style="text-decoration:none;display:inline-flex;align-items:center">취소</a>
+        </div>
+      </form>
+    </div>
+  </section>
+
+  <!-- S5 -->
+  <section id="s5" hidden aria-labelledby="s5-title">
+    <header class="topbar">
+      <a class="back-link" href="#s3">← 주제</a>
+    </header>
+    <div class="page">
+      <article class="note-view">
+        <h2 id="s5-title"></h2>
+        <div id="note-view-meta" class="note-meta"></div>
+        <p id="note-view-dates" class="note-dates"></p>
+        <div id="note-view-body" class="note-content"></div>
+        <div class="form-actions">
+          <a id="note-edit-btn" class="btn btn-secondary" href="#s4">수정</a>
+          <button id="note-delete-btn" class="btn btn-danger" type="button">삭제</button>
+        </div>
+      </article>
+    </div>
+  </section>
+
 </main>
 <script>
-  // 로그인 동작은 F5 단계에서 붙인다. 지금은 제출해도 페이지가 다시 열리지 않게만 막는다.
-  document.getElementById('login-form').addEventListener('submit', function (event) {
+  // 더미 데이터: design.md 5절 GET /api/subjects 응답 모양. 생성 최신순.
+  var TODAY = '2026-10-31';
+  var subjects = [
+    { id: 2, name: 'SQLD 자격증', background: '', started_on: '2026-10-30', target_date: '2026-12-06',
+      created_at: '2026-10-30T09:00:00Z', updated_at: '2026-10-30T09:00:00Z',
+      total_minutes: 90, last7_minutes: 90, days_studied: 1, note_count: 0, open_note_count: 0 },
+    { id: 1, name: '빅데이터분석기사 실기', background: '임베디드 HW 개발 1년 / SW 개발 2년 5개월 / 정보처리산업기사 / AI 엔지니어 1개월째',
+      started_on: '2026-10-26', target_date: null,
+      created_at: '2026-10-26T09:00:00Z', updated_at: '2026-10-26T09:00:00Z',
+      total_minutes: 750, last7_minutes: 750, days_studied: 4, note_count: 6, open_note_count: 1 }
+  ];
+
+  function formatHours(minutes) {
+    return String(Math.round(minutes / 6) / 10) + 'h';
+  }
+  function dday(target) {
+    var diff = Math.round((new Date(target) - new Date(TODAY)) / 86400000);
+    return diff > 0 ? 'D-' + diff : diff === 0 ? 'D-Day' : 'D+' + (-diff);
+  }
+  function el(tag, cls, text) {
+    var e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+  // F1: 새로고침해도 값이 유지되는 것을 localStorage로 흉내 낸다(서버 저장 대신).
+  var STORE_KEY = 'study-log-mockup-subjects';
+  try {
+    var saved = JSON.parse(localStorage.getItem(STORE_KEY));
+    if (Array.isArray(saved) && saved.length) subjects = saved;
+  } catch (e) { /* 저장값이 없거나 깨졌으면 더미 그대로 */ }
+  function saveSubjects() {
+    try { localStorage.setItem(STORE_KEY, JSON.stringify(subjects)); } catch (e) { /* 무시 */ }
+  }
+  var currentSubjectId = subjects.some(function (x) { return x.id === 1; }) ? 1 : subjects[0].id;
+  function currentSubject() {
+    return subjects.filter(function (x) { return x.id === currentSubjectId; })[0];
+  }
+  var NAME_ERROR = '이름은 1~100자여야 합니다'; // 422 fields.name 문구
+  function renderSubjects() {
+    var list = document.getElementById('topic-list');
+    list.replaceChildren();
+    subjects.forEach(function (sub) {
+      var li = el('li');
+      var a = el('a', 'topic-card');
+      a.href = '#s3';
+      a.addEventListener('click', function () { currentSubjectId = sub.id; sessionShown = 20; resetNoteFilter(); renderSummary(sub); renderSessions(); renderNotes(); subjectEditForm.hidden = true; });
+      a.appendChild(el('h2', '', sub.name));
+      var meta = el('p', 'topic-meta');
+      meta.appendChild(el('span', '', '시작일 ' + sub.started_on));
+      if (sub.target_date) meta.appendChild(el('span', '', dday(sub.target_date)));
+      a.appendChild(meta);
+      var stats = el('div', 'topic-stats');
+      stats.appendChild(el('span', 'hours', formatHours(sub.total_minutes)));
+      stats.appendChild(el('span', '', '노트 ' + sub.note_count));
+      if (sub.open_note_count > 0) stats.appendChild(el('span', 'badge-open', '미해결 ' + sub.open_note_count));
+      a.appendChild(stats);
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    document.getElementById('topic-empty').hidden = subjects.length > 0;
+  }
+
+  var topicForm = document.getElementById('topic-form');
+  var newTopicBtn = document.getElementById('new-topic-btn');
+  function toggleTopicForm(open) {
+    topicForm.hidden = !open;
+    document.getElementById('topic-name-error').hidden = true;
+    newTopicBtn.setAttribute('aria-expanded', String(open));
+    if (open) {
+      topicForm.reset();
+      document.getElementById('topic-started').value = TODAY;
+      document.getElementById('topic-name').focus();
+    }
+  }
+  newTopicBtn.addEventListener('click', function () { toggleTopicForm(topicForm.hidden); });
+  document.getElementById('topic-cancel').addEventListener('click', function () { toggleTopicForm(false); });
+  topicForm.addEventListener('submit', function (event) {
     event.preventDefault();
+    var name = document.getElementById('topic-name').value.trim();
+    var nameError = document.getElementById('topic-name-error');
+    if (!name) { // 서버였다면 422 validation_error
+      nameError.textContent = NAME_ERROR;
+      nameError.hidden = false;
+      document.getElementById('topic-name').focus();
+      return;
+    }
+    nameError.hidden = true;
+    subjects.unshift({
+      id: Date.now(), name: name, background: document.getElementById('topic-background').value,
+      started_on: document.getElementById('topic-started').value || TODAY,
+      target_date: document.getElementById('topic-target').value || null,
+      created_at: TODAY + 'T00:00:00Z', updated_at: TODAY + 'T00:00:00Z',
+      total_minutes: 0, last7_minutes: 0, days_studied: 0, note_count: 0, open_note_count: 0
+    });
+    toggleTopicForm(false);
+    saveSubjects();
+    renderSubjects();
+  });
+
+  // ---- S3 주제 상세 ----
+  // 더미 데이터: design.md 5절 sessions / notes 응답 모양. 노트 필터 동작은 F4에서 붙인다.
+  var KIND_LABEL = { remember: '기억할 것', debug: '디버깅', review: '후기' };
+  var sessions = [
+    { id: 4, subject_id: 1, studied_on: '2026-10-29', minutes: 240, memo: '', created_at: '2026-10-29T13:00:00Z' },
+    { id: 3, subject_id: 1, studied_on: '2026-10-28', minutes: 150, memo: '시나공 ch3', created_at: '2026-10-28T13:00:00Z' },
+    { id: 2, subject_id: 1, studied_on: '2026-10-27', minutes: 180, memo: 'groupby 연습', created_at: '2026-10-27T13:00:00Z' },
+    { id: 1, subject_id: 1, studied_on: '2026-10-26', minutes: 180, memo: '', created_at: '2026-10-26T13:00:00Z' },
+    { id: 5, subject_id: 2, studied_on: '2026-10-30', minutes: 90, memo: '1과목 개념', created_at: '2026-10-30T13:00:00Z' }
+  ];
+  // F2: 기록도 localStorage에 두고, 주제의 합계는 기록에서 다시 계산한다(서버의 계산 필드 흉내).
+  var SESSION_KEY = 'study-log-mockup-sessions';
+  try {
+    var savedSessions = JSON.parse(localStorage.getItem(SESSION_KEY));
+    if (Array.isArray(savedSessions)) sessions = savedSessions;
+  } catch (e) { /* 저장값이 없거나 깨졌으면 더미 그대로 */ }
+  function saveSessions() {
+    try { localStorage.setItem(SESSION_KEY, JSON.stringify(sessions)); } catch (e) { /* 무시 */ }
+  }
+  var MINUTES_ERROR = '1~1440 사이여야 합니다'; // 422 fields.minutes 문구
+  var sessionShown = 20;
+  function subjectSessions() { // studied_on desc, 같은 날은 id desc
+    return sessions.filter(function (x) { return x.subject_id === currentSubjectId; }).sort(function (a, b) {
+      return a.studied_on < b.studied_on ? 1 : a.studied_on > b.studied_on ? -1 : b.id - a.id;
+    });
+  }
+  // 오늘 포함 7일(KST)의 시작일: TODAY - 6일
+  function sevenDaysAgo() {
+    var d = new Date(TODAY + 'T00:00:00Z');
+    d.setUTCDate(d.getUTCDate() - 6);
+    return d.toISOString().slice(0, 10);
+  }
+  function recomputeTotals(sub) {
+    var from = sevenDaysAgo(), days = {};
+    sub.total_minutes = 0; sub.last7_minutes = 0;
+    sessions.forEach(function (x) {
+      if (x.subject_id !== sub.id) return;
+      sub.total_minutes += x.minutes;
+      if (x.studied_on >= from && x.studied_on <= TODAY) sub.last7_minutes += x.minutes;
+      days[x.studied_on] = true;
+    });
+    sub.days_studied = Object.keys(days).length;
+  }
+  function refreshSessions() {
+    var sub = currentSubject();
+    recomputeTotals(sub);
+    saveSubjects();
+    saveSessions();
+    renderSummary(sub);
+    renderSubjects();
+    renderSessions();
+  }
+  var notes = [
+    { id: 8, subject_id: 1, kind: 'remember', title: 'DataFrame의 isnull()과 isna()가 다른 이유?', body: '', tags: ['pandas'], is_open: true, created_at: '2026-10-28T13:10:00Z', updated_at: '2026-10-28T13:10:00Z' },
+    { id: 7, subject_id: 1, kind: 'remember', title: 'csv 저장 시 인덱스 제외', body: '인덱스를 제외하고 저장하려면 index=False\n\n```python\ndf.to_csv(\'cafe.csv\', index=False)\n```', tags: ['pandas', 'csv'], is_open: false, created_at: '2026-10-27T11:25:00Z', updated_at: '2026-10-27T11:25:00Z' },
+    { id: 6, subject_id: 1, kind: 'debug', title: 'FileNotFoundError: temp_csv', body: '## 문제상황\n## 원인\n## 해결', tags: ['csv'], is_open: false, created_at: '2026-10-27T09:00:00Z', updated_at: '2026-10-27T09:00:00Z' },
+    { id: 5, subject_id: 1, kind: 'remember', title: 'to_datetime 형식 지정', body: '', tags: ['datetime', 'pandas'], is_open: false, created_at: '2026-10-26T15:00:00Z', updated_at: '2026-10-26T15:00:00Z' },
+    { id: 4, subject_id: 1, kind: 'debug', title: 'KeyError: 컬럼 이름 공백', body: '', tags: ['pandas'], is_open: false, created_at: '2026-10-26T12:00:00Z', updated_at: '2026-10-26T12:00:00Z' },
+    { id: 3, subject_id: 1, kind: 'review', title: '코딩팡 사용', body: '', tags: [], is_open: false, created_at: '2026-10-26T10:00:00Z', updated_at: '2026-10-26T10:00:00Z' }
+  ];
+  // F3: 노트도 localStorage에 두고, 주제의 노트 수·미해결 수는 노트에서 다시 계산한다.
+  var NOTE_KEY = 'study-log-mockup-notes';
+  try {
+    var savedNotes = JSON.parse(localStorage.getItem(NOTE_KEY));
+    if (Array.isArray(savedNotes)) notes = savedNotes;
+  } catch (e) { /* 저장값이 없거나 깨졌으면 더미 그대로 */ }
+  function saveNotes() {
+    try { localStorage.setItem(NOTE_KEY, JSON.stringify(notes)); } catch (e) { /* 무시 */ }
+  }
+  function recomputeNoteCounts(sub) {
+    var mine = notes.filter(function (x) { return x.subject_id === sub.id; });
+    sub.note_count = mine.length;
+    sub.open_note_count = mine.filter(function (x) { return x.is_open; }).length;
+  }
+  var noteTags = [];
+  var PAGE_SIZE = 20;
+  var noteFilter = { kind: '', open: false, tags: [], q: '', shown: PAGE_SIZE };
+
+  function fmtDay(date) {
+    return String(Number(date.slice(5, 7))) + '월 ' + String(Number(date.slice(8, 10))) + '일';
+  }
+  function renderSummary(sub) {
+    document.getElementById('s3-title').textContent = sub.name;
+    var summary = document.getElementById('subject-summary');
+    summary.replaceChildren();
+    var period = sub.started_on + ' ~ ' + (sub.target_date || '목표일 없음');
+    var parts = [period];
+    if (sub.target_date) parts.push(dday(sub.target_date));
+    parts.forEach(function (t) { summary.appendChild(el('span', '', t)); });
+    [['누적 ', formatHours(sub.total_minutes)], ['최근 7일 ', formatHours(sub.last7_minutes)], ['공부한 날 ', sub.days_studied + '일']].forEach(function (p) {
+      var s = el('span', '', p[0]);
+      s.appendChild(el('strong', '', p[1]));
+      summary.appendChild(s);
+    });
+    var bg = document.getElementById('subject-background');
+    bg.textContent = sub.background;
+    bg.hidden = !sub.background;
+  }
+  function renderSessions() {
+    var list = document.getElementById('session-list');
+    list.replaceChildren();
+    var mine = subjectSessions();
+    mine.slice(0, sessionShown).forEach(function (s) {
+      var li = el('li', 'record');
+      li.appendChild(el('span', 'date', fmtDay(s.studied_on)));
+      li.appendChild(el('span', 'dur', formatHours(s.minutes)));
+      li.appendChild(el('span', 'memo', s.memo));
+      var edit = el('button', 'btn btn-secondary', '수정'); edit.type = 'button';
+      edit.addEventListener('click', function () { editSession(li, s); });
+      var del = el('button', 'btn btn-secondary', '삭제'); del.type = 'button';
+      del.addEventListener('click', function () { // DELETE /api/sessions/{id} → 204
+        sessions = sessions.filter(function (x) { return x.id !== s.id; });
+        refreshSessions();
+      });
+      li.append(edit, del);
+      list.appendChild(li);
+    });
+    document.getElementById('session-more').hidden = mine.length <= sessionShown;
+  }
+  document.getElementById('session-more').addEventListener('click', function () {
+    sessionShown += PAGE_SIZE;
+    renderSessions();
+  });
+  // "수정"을 누르면 행이 날짜·분·메모 입력과 저장/취소로 바뀐다.
+  function editSession(li, s) {
+    li.replaceChildren();
+    var form = el('form', 'record-edit');
+    var d = el('input', 'input'); d.type = 'date'; d.value = s.studied_on; d.setAttribute('aria-label', '날짜');
+    var m = el('input', 'input'); m.type = 'number'; m.step = 15; m.value = s.minutes; m.setAttribute('aria-label', '시간 (분)');
+    var memo = el('input', 'input memo-input'); memo.type = 'text'; memo.value = s.memo; memo.maxLength = 500; memo.setAttribute('aria-label', '메모');
+    var err = el('p', 'form-error'); err.hidden = true;
+    var actions = el('div', 'form-actions');
+    var save = el('button', 'btn btn-primary', '저장'); save.type = 'submit';
+    var cancel = el('button', 'btn btn-secondary', '취소'); cancel.type = 'button';
+    cancel.addEventListener('click', renderSessions);
+    actions.append(save, cancel);
+    form.append(d, m, memo, err, actions);
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      var v = Number(m.value);
+      if (!(v >= 1 && v <= 1440)) { err.textContent = MINUTES_ERROR; err.hidden = false; return; }
+      s.studied_on = d.value || s.studied_on; s.minutes = v; s.memo = memo.value;
+      refreshSessions();
+    });
+    li.appendChild(form);
+    d.focus();
+  }
+  function renderKindTabs() {
+    var box = document.getElementById('kind-tabs');
+    box.replaceChildren();
+    [['', '전체'], ['remember', '기억할 것'], ['debug', '디버깅'], ['review', '후기']].forEach(function (k) {
+      var b = el('button', 'tab', k[1]); b.type = 'button';
+      b.setAttribute('aria-pressed', String(noteFilter.kind === k[0]));
+      b.addEventListener('click', function () { noteFilter.kind = k[0]; noteFilter.shown = PAGE_SIZE; renderKindTabs(); renderNotes(); });
+      box.appendChild(b);
+    });
+  }
+  function resetNoteFilter() {
+    noteFilter = { kind: '', open: false, tags: [], q: '', shown: PAGE_SIZE };
+    document.getElementById('open-only').checked = false;
+    document.getElementById('note-search').value = '';
+    renderKindTabs();
+  }
+  function renderTagChips() {
+    var box = document.getElementById('tag-chips');
+    box.replaceChildren();
+    noteTags.forEach(function (t) {
+      var b = el('button', 'chip', t); b.type = 'button';
+      b.setAttribute('aria-pressed', String(noteFilter.tags.indexOf(t) >= 0));
+      b.addEventListener('click', function () {
+        var i = noteFilter.tags.indexOf(t);
+        if (i >= 0) noteFilter.tags.splice(i, 1); else noteFilter.tags.push(t);
+        noteFilter.shown = PAGE_SIZE; renderNotes();
+      });
+      box.appendChild(b);
+    });
+  }
+  function subjectNotes() { // updated_at desc, 같은 시각은 id desc
+    return notes.filter(function (x) { return x.subject_id === currentSubjectId; }).sort(function (p, q) {
+      return p.updated_at < q.updated_at ? 1 : p.updated_at > q.updated_at ? -1 : q.id - p.id;
+    });
+  }
+  function renderNotes() {
+    var list = document.getElementById('note-list');
+    list.replaceChildren();
+    var mine = subjectNotes();
+    noteTags = [];
+    mine.forEach(function (n) { n.tags.forEach(function (t) { if (noteTags.indexOf(t) < 0) noteTags.push(t); }); });
+    noteTags.sort();
+    noteFilter.tags = noteFilter.tags.filter(function (t) { return noteTags.indexOf(t) >= 0; });
+    renderTagChips();
+    var q = noteFilter.q.trim().toLowerCase();
+    var found = mine.filter(function (n) { // 모든 조건 AND
+      if (noteFilter.kind && n.kind !== noteFilter.kind) return false;
+      if (noteFilter.open && !n.is_open) return false;
+      if (!noteFilter.tags.every(function (t) { return n.tags.indexOf(t) >= 0; })) return false;
+      if (q && (n.title + '\n' + n.body).toLowerCase().indexOf(q) < 0) return false;
+      return true;
+    });
+    found.slice(0, noteFilter.shown).forEach(function (n) {
+      var li = el('li');
+      var a = el('a', 'note-item'); a.href = '#s5';
+      a.addEventListener('click', function () { viewNoteId = n.id; renderNoteView(); });
+      a.appendChild(el('h3', '', n.title));
+      var meta = el('div', 'note-meta');
+      meta.appendChild(el('span', 'badge-kind', KIND_LABEL[n.kind]));
+      n.tags.forEach(function (t) { meta.appendChild(el('span', 'tag', t)); });
+      if (n.is_open) meta.appendChild(el('span', 'badge-open', '미해결'));
+      meta.appendChild(el('span', '', n.updated_at.slice(0, 10)));
+      a.appendChild(meta);
+      li.appendChild(a);
+      list.appendChild(li);
+    });
+    document.getElementById('note-empty').hidden = found.length > 0;
+    document.getElementById('note-more').hidden = found.length <= noteFilter.shown;
+  }
+  document.getElementById('open-only').addEventListener('change', function (e) { noteFilter.open = e.target.checked; noteFilter.shown = PAGE_SIZE; renderNotes(); });
+  document.getElementById('note-more').addEventListener('click', function () { noteFilter.shown += PAGE_SIZE; renderNotes(); });
+  var noteSearchTimer = null;
+  document.getElementById('note-search').addEventListener('input', function (e) {
+    var v = e.target.value;
+    clearTimeout(noteSearchTimer);
+    noteSearchTimer = setTimeout(function () { noteFilter.q = v; noteFilter.shown = PAGE_SIZE; renderNotes(); }, 300);
+  });
+  var subjectEditForm = document.getElementById('subject-edit-form');
+  document.getElementById('subject-edit-btn').addEventListener('click', function () {
+    var sub = currentSubject();
+    document.getElementById('edit-name-error').hidden = true;
+    document.getElementById('edit-name').value = sub.name;
+    document.getElementById('edit-started').value = sub.started_on;
+    document.getElementById('edit-target').value = sub.target_date || '';
+    document.getElementById('edit-background').value = sub.background;
+    subjectEditForm.hidden = false;
+    document.getElementById('edit-name').focus();
+  });
+  document.getElementById('subject-edit-cancel').addEventListener('click', function () { subjectEditForm.hidden = true; });
+  subjectEditForm.addEventListener('submit', function (event) {
+    event.preventDefault();
+    var name = document.getElementById('edit-name').value.trim();
+    var nameError = document.getElementById('edit-name-error');
+    if (!name) { // 서버였다면 PATCH 422
+      nameError.textContent = NAME_ERROR;
+      nameError.hidden = false;
+      document.getElementById('edit-name').focus();
+      return;
+    }
+    nameError.hidden = true;
+    var sub = currentSubject();
+    sub.name = name;
+    sub.started_on = document.getElementById('edit-started').value || sub.started_on;
+    sub.target_date = document.getElementById('edit-target').value || null;
+    sub.background = document.getElementById('edit-background').value;
+    sub.updated_at = TODAY + 'T00:00:00Z';
+    saveSubjects();
+    renderSummary(sub);
+    renderSubjects();
+    subjectEditForm.hidden = true;
+  });
+  document.getElementById('session-date').value = TODAY;
+  document.getElementById('session-form').addEventListener('submit', function (event) {
+    event.preventDefault();
+    var err = document.getElementById('session-error');
+    var minutesInput = document.getElementById('session-minutes');
+    var v = Number(minutesInput.value);
+    if (minutesInput.value === '' || !Number.isInteger(v) || v < 1 || v > 1440) { // 서버였다면 422
+      err.textContent = MINUTES_ERROR;
+      err.hidden = false;
+      minutesInput.focus();
+      return;
+    }
+    err.hidden = true;
+    sessions.push({
+      id: Date.now(), subject_id: currentSubjectId,
+      studied_on: document.getElementById('session-date').value || TODAY,
+      minutes: v, memo: document.getElementById('session-memo').value,
+      created_at: TODAY + 'T00:00:00Z'
+    });
+    document.getElementById('session-memo').value = '';
+    refreshSessions();
+  });
+  subjects.forEach(recomputeTotals);
+  subjects.forEach(recomputeNoteCounts);
+  renderSubjects();
+  renderSummary(currentSubject());
+  renderSessions();
+  renderKindTabs();
+  renderTagChips();
+  renderNotes();
+
+  // ---- F3 마크다운 렌더 ----
+  // 목업이라 외부 라이브러리(marked, highlight.js) 대신 작은 변환 함수로 흉내 낸다.
+  // 모든 문자를 먼저 이스케이프한 뒤 태그를 만들기 때문에 본문 안의 HTML은 실행되지 않는다(실서비스는 DOMPurify).
+  function esc(t) {
+    return t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+  var PY_KW = {};
+  ('and as assert break class continue def del elif else except False finally for from if import in is lambda None not or pass raise return True try while with yield print')
+    .split(' ').forEach(function (w) { PY_KW[w] = true; });
+  function highlightPython(code) { // ```python 구문 강조
+    var re = /(#[^\n]*)|('(?:\\.|[^'\\\n])*'|"(?:\\.|[^"\\\n])*")|\b(\d+(?:\.\d+)?)\b|\b([A-Za-z_]\w*)\b/g;
+    var out = '', last = 0, m;
+    while ((m = re.exec(code))) {
+      out += esc(code.slice(last, m.index));
+      var cls = m[1] ? 'hl-com' : m[2] ? 'hl-str' : m[3] ? 'hl-num' : PY_KW[m[4]] ? 'hl-kw' : '';
+      out += cls ? '<span class="' + cls + '">' + esc(m[0]) + '</span>' : esc(m[0]);
+      last = re.lastIndex;
+    }
+    return out + esc(code.slice(last));
+  }
+  function inlineMd(t) {
+    return esc(t).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  }
+  function renderMarkdown(src) {
+    var lines = src.replace(/\r\n/g, '\n').split('\n'), html = '', i = 0, para = [], list = null;
+    function flushPara() { if (para.length) { html += '<p>' + para.map(inlineMd).join('<br>') + '</p>'; para = []; } }
+    function flushList() { if (list) { html += '</' + list + '>'; list = null; } }
+    while (i < lines.length) {
+      var line = lines[i], m;
+      if ((m = /^```\s*(\w*)\s*$/.exec(line))) { // 코드 블록
+        flushPara(); flushList();
+        var code = []; i++;
+        while (i < lines.length && !/^```\s*$/.test(lines[i])) { code.push(lines[i]); i++; }
+        var text = code.join('\n'), lang = m[1].toLowerCase();
+        html += '<pre><code' + (lang ? ' class="language-' + esc(lang) + '"' : '') + '>' +
+          (lang === 'python' || lang === 'py' ? highlightPython(text) : esc(text)) + '</code></pre>';
+      } else if ((m = /^(#{1,3})\s+(.*)$/.exec(line))) {
+        flushPara(); flushList();
+        html += '<h' + m[1].length + '>' + inlineMd(m[2]) + '</h' + m[1].length + '>';
+      } else if ((m = /^\s*([-*]|\d+\.)\s+(.*)$/.exec(line))) {
+        flushPara();
+        var kind = /\d/.test(m[1]) ? 'ol' : 'ul';
+        if (list !== kind) { flushList(); html += '<' + kind + '>'; list = kind; }
+        html += '<li>' + inlineMd(m[2]) + '</li>';
+      } else if (line.trim() === '') {
+        flushPara(); flushList();
+      } else {
+        flushList(); para.push(line);
+      }
+      i++;
+    }
+    flushPara(); flushList();
+    return html;
+  }
+
+  // ---- S4 노트 편집 (작성·수정 공용) ----
+  var DEBUG_TEMPLATE = '## 문제상황\n\n## 원인\n\n## 해결\n';
+  var TITLE_ERROR = '제목은 1~200자여야 합니다'; // 422 fields.title 문구
+  var noteBody = document.getElementById('note-body');
+  var notePreview = document.getElementById('note-preview');
+  var previewToggle = document.getElementById('preview-toggle');
+  var noteTitle = document.getElementById('note-title');
+  var noteError = document.getElementById('note-error');
+  var editingNoteId = null; // null이면 작성, 숫자면 그 노트를 수정
+  var viewNoteId = 7;
+  function updateCounter() {
+    document.getElementById('body-counter').textContent = noteBody.value.length.toLocaleString('en-US') + ' / 50,000자';
+  }
+  function showEditor() { // 미리보기에서 편집 모드로 되돌린다
+    noteBody.hidden = false; notePreview.hidden = true;
+    previewToggle.setAttribute('aria-pressed', 'false'); previewToggle.textContent = '미리보기';
+  }
+  function openEditor(noteId) {
+    editingNoteId = noteId;
+    var n = noteId === null ? null : notes.filter(function (x) { return x.id === noteId; })[0];
+    document.querySelectorAll('input[name="kind"]').forEach(function (r) { r.checked = r.value === (n ? n.kind : 'remember'); });
+    noteTitle.value = n ? n.title : '';
+    document.getElementById('note-tags').value = n ? n.tags.join(', ') : '';
+    document.getElementById('note-open').checked = n ? n.is_open : false;
+    noteBody.value = n ? n.body : '';
+    noteError.hidden = true;
+    showEditor();
+    updateCounter();
+    var cancelHref = n ? '#s5' : '#s3'; // 취소: 작성이면 S3, 수정이면 S5
+    document.getElementById('note-cancel').href = cancelHref;
+    document.getElementById('note-cancel-top').href = cancelHref;
+    document.getElementById('s4-title').textContent = n ? '노트 수정' : '새 노트';
+  }
+  document.querySelectorAll('input[name="kind"]').forEach(function (r) {
+    r.addEventListener('change', function () {
+      if (r.checked && r.value === 'debug' && noteBody.value.trim() === '') {
+        noteBody.value = DEBUG_TEMPLATE;
+        updateCounter();
+      }
+    });
+  });
+  noteBody.addEventListener('input', updateCounter);
+  previewToggle.addEventListener('click', function () {
+    if (noteBody.hidden) { showEditor(); return; }
+    noteBody.hidden = true;
+    notePreview.hidden = false;
+    previewToggle.setAttribute('aria-pressed', 'true');
+    previewToggle.textContent = '편집';
+    notePreview.innerHTML = noteBody.value ? renderMarkdown(noteBody.value) : '<p>(내용 없음)</p>';
+  });
+  document.getElementById('new-note-btn').addEventListener('click', function () { openEditor(null); });
+  document.getElementById('note-edit-btn').addEventListener('click', function () { openEditor(viewNoteId); });
+  document.getElementById('note-form').addEventListener('submit', function (event) { // POST / PATCH
+    event.preventDefault();
+    var title = noteTitle.value.trim();
+    if (!title || title.length > 200) { // 서버였다면 422 fields.title
+      noteError.textContent = TITLE_ERROR;
+      noteError.hidden = false;
+      noteTitle.focus();
+      return;
+    }
+    noteError.hidden = true;
+    var tags = [];
+    document.getElementById('note-tags').value.split(',').forEach(function (t) {
+      t = t.trim().toLowerCase();
+      if (t && tags.indexOf(t) < 0) tags.push(t);
+    });
+    var kind = document.querySelector('input[name="kind"]:checked').value;
+    var now = TODAY + 'T12:00:00Z';
+    var isOpen = document.getElementById('note-open').checked;
+    var n = editingNoteId === null ? null : notes.filter(function (x) { return x.id === editingNoteId; })[0];
+    if (n) {
+      n.kind = kind; n.title = title; n.body = noteBody.value; n.tags = tags; n.is_open = isOpen; n.updated_at = now;
+    } else {
+      n = { id: Date.now(), subject_id: currentSubjectId, kind: kind, title: title, body: noteBody.value, tags: tags,
+        is_open: isOpen, created_at: now, updated_at: now };
+      notes.push(n);
+    }
+    viewNoteId = n.id;
+    refreshNotes();
+    renderNoteView();
+    location.hash = '#s5';
+  });
+
+  // ---- S5 노트 보기 ----
+  function refreshNotes() {
+    recomputeNoteCounts(currentSubject());
+    saveSubjects();
+    saveNotes();
+    renderSubjects();
+    renderNotes();
+  }
+  function renderNoteView() {
+    var n = notes.filter(function (x) { return x.id === viewNoteId; })[0];
+    var meta = document.getElementById('note-view-meta');
+    var dates = document.getElementById('note-view-dates');
+    var body = document.getElementById('note-view-body');
+    if (!n) { // GET /api/notes/{id} → 404
+      document.getElementById('s5-title').textContent = '노트를 찾을 수 없습니다';
+      meta.replaceChildren(); dates.replaceChildren(); body.replaceChildren();
+      return;
+    }
+    document.getElementById('s5-title').textContent = n.title;
+    meta.replaceChildren(el('span', 'badge-kind', KIND_LABEL[n.kind]));
+    n.tags.forEach(function (t) { meta.appendChild(el('span', 'tag', t)); });
+    if (n.is_open) meta.appendChild(el('span', 'badge-open', '미해결'));
+    dates.replaceChildren(el('span', '', '작성 ' + n.created_at.slice(0, 10)), el('span', '', '수정 ' + n.updated_at.slice(0, 10)));
+    body.innerHTML = n.body ? renderMarkdown(n.body) : '<p>(내용 없음)</p>';
+  }
+  document.getElementById('note-delete-btn').addEventListener('click', function () { // DELETE /api/notes/{id} → 204
+    if (!confirm('이 노트를 삭제할까요?')) return;
+    notes = notes.filter(function (x) { return x.id !== viewNoteId; });
+    refreshNotes();
+    renderNoteView();
+    location.hash = '#s3';
+  });
+  renderNoteView();
+
+  // 화면 전환: #s1, #s2 해시로 보여 줄 화면을 고른다. 아직 없는 화면(#s3~)은 무시한다.
+  // F5: 로그인하지 않았으면 S1 외 화면은 #s1로 보내고, 로그인 상태에서 S1을 열면 S2로 보낸다.
+  function showScreen() {
+    var id = location.hash.slice(1) || (isLoggedIn() ? 's2' : 's1');
+    var target = document.getElementById(id);
+    if (!target || !/^s\d+$/.test(id)) return;
+    if (id !== 's1' && !isLoggedIn()) { location.hash = '#s1'; return; }
+    if (id === 's1' && isLoggedIn()) { location.hash = '#s2'; return; }
+    document.querySelectorAll('#app > section').forEach(function (sec) { sec.hidden = sec !== target; });
+    if (id === 's1') document.getElementById('login-password').focus();
+  }
+
+  // F5 세션 흉내: 서명 쿠키 대신 발급 시각을 localStorage에 두고 30일이 지나면 거부한다.
+  var SESSION_KEY = 'study-log-mockup-session';
+  var SESSION_MAX_MS = 30 * 24 * 60 * 60 * 1000; // Max-Age=2592000
+  var MOCK_PASSWORD = 'study1234'; // 목업 전용 비밀번호 (실제는 APP_PASSWORD)
+  var failCount = 0;
+  var lockedUntil = 0;
+  function isLoggedIn() {
+    var issued = Number(localStorage.getItem(SESSION_KEY));
+    return issued > 0 && Date.now() - issued < SESSION_MAX_MS;
+  }
+  function showLoginError(which) {
+    document.getElementById('login-error-invalid').hidden = which !== 'invalid';
+    document.getElementById('login-error-locked').hidden = which !== 'locked';
+  }
+  window.addEventListener('hashchange', showScreen);
+  renderSubjects();
+  showScreen();
+
+  document.getElementById('login-form').addEventListener('submit', function (event) { // POST /api/login
+    event.preventDefault();
+    var input = document.getElementById('login-password');
+    if (Date.now() < lockedUntil) { showLoginError('locked'); return; } // 429 too_many_attempts
+    if (input.value !== MOCK_PASSWORD) {
+      failCount += 1;
+      if (failCount >= 5) { lockedUntil = Date.now() + 60 * 1000; failCount = 0; showLoginError('locked'); }
+      else showLoginError('invalid'); // 401 invalid_password
+      input.select();
+      return;
+    }
+    failCount = 0; // 성공하면 카운터 초기화
+    showLoginError(null);
+    input.value = '';
+    localStorage.setItem(SESSION_KEY, String(Date.now())); // 204 + Set-Cookie
+    location.hash = '#s2';
+  });
+  document.getElementById('logout-btn').addEventListener('click', function () { // POST /api/logout → 204
+    localStorage.removeItem(SESSION_KEY);
   });
 </script>
 </body>
