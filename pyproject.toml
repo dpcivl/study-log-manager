@@ -1,0 +1,15 @@
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.ruff.lint.extend-per-file-ignores]
+# FastAPI는 Depends()/Query()를 기본값으로 쓰는 것이 관례다.
+"src/app/routers/*.py" = ["B008"]

@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<!-- S4 노트 편집(작성·수정 공용). mockup/index.html의 S4 부분을 옮긴다. -->
+<section id="s4" data-subject-id="{{ subject_id if subject_id is not none else '' }}" data-note-id="{{ note_id if note_id is not none else '' }}"></section>
+{% endblock %}
+{% block scripts %}<script type="module" src="/static/js/note_edit.js"></script>{% endblock %}
