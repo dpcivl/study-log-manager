@@ -213,6 +213,9 @@
   .draft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
   .draft-banner span { flex: 1; min-width: 160px; }
   .draft-banner .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
+  .conflict-panel { margin: 0; border-color: var(--danger, #c0392b); }
+  .conflict-panel p { margin: 0 0 6px; }
+  .conflict-panel .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
   /* 목업 전용 상황 재현 패널 */
   .mock-panel { position: fixed; right: 12px; bottom: 12px; z-index: 10; max-width: calc(100vw - 24px); width: 280px; padding: 8px 12px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); font-size: 14px; }
   .mock-panel summary { cursor: pointer; font-weight: 600; }
@@ -405,6 +408,15 @@
           <p id="body-counter" class="counter">0 / 50,000자</p>
         </div>
         <p id="note-error" class="form-error" role="alert" hidden></p>
+        <!-- F9 -->
+        <div id="conflict-panel" class="notice conflict-panel" role="alert" hidden>
+          <p><strong>다른 곳에서 먼저 수정된 노트입니다</strong></p>
+          <p id="conflict-info"></p>
+          <div class="form-actions">
+            <button id="conflict-overwrite" class="btn btn-secondary" type="button">내 글로 덮어쓰기</button>
+            <button id="conflict-load" class="btn btn-secondary" type="button">서버 버전 불러오기</button>
+          </div>
+        </div>
         <div class="form-actions">
           <button class="btn btn-primary" type="submit">저장</button>
           <a id="note-cancel" class="btn btn-secondary" href="#s3" style="text-decoration:none;display:inline-flex;align-items:center">취소</a>
@@ -458,6 +470,9 @@
   <button id="mock-fail-note" class="btn btn-secondary" type="button">렌더 실패 노트 열기 (&gt; 50,000자)</button>
   <label class="check"><input id="mock-session-expired" type="checkbox"> 세션 만료 (다음 저장 때 401, F8)</label>
   <label class="check"><input id="mock-storage-blocked" type="checkbox"> 브라우저 저장소 사용 불가 (F8)</label>
+  <button id="mock-other-edit" class="btn btn-secondary" type="button">다른 곳에서 이 노트 먼저 고치기 (409, F9)</button>
+  <button id="mock-other-delete" class="btn btn-secondary" type="button">다른 곳에서 이 노트 지우기 (404, F9)</button>
+  <p id="mock-note" role="status" hidden></p>
 </details>
 <script>
   // 더미 데이터: design.md 5절 GET /api/subjects 응답 모양. 생성 최신순.
@@ -953,6 +968,8 @@
     document.getElementById('note-open').checked = n ? n.is_open : false;
     noteBody.value = n ? n.body : '';
     noteError.hidden = true;
+    document.getElementById('conflict-panel').hidden = true;
+    document.getElementById('mock-note').hidden = true;
     showEditor();
     updateCounter();
     var cancelHref = n ? '#s5' : '#s3'; // 취소: 작성이면 S3, 수정이면 S5
@@ -1112,6 +1129,17 @@
       location.hash = '#s1';
       return;
     }
+    saveNote(editingNoteId === null ? undefined : loadedBase); // F9: 수정 저장은 항상 expected_updated_at을 보낸다
+  });
+  function nextStamp(prev) { // 서버의 지금 시각 흉내: 초 단위 ISO, 이전 값보다 항상 뒤
+    var d = new Date();
+    var t = TODAY + 'T' + d.toISOString().slice(11, 19) + 'Z';
+    if (prev && t <= prev) t = new Date(Date.parse(prev) + 1000).toISOString().replace(/\.\d+Z$/, 'Z');
+    return t;
+  }
+  var conflictPanel = document.getElementById('conflict-panel');
+  var conflictCurrent = null; // 409 error.current
+  function saveNote(expected) { // PATCH/POST. 검사 순서: 입력값(422) → 없는 노트(404) → 충돌(409)
     var title = noteTitle.value.trim();
     if (!title || title.length > 200) { // 서버였다면 422 fields.title
       noteError.textContent = TITLE_ERROR;
@@ -1120,15 +1148,30 @@
       return;
     }
     noteError.hidden = true;
+    var existing = editingNoteId === null ? null : notes.filter(function (x) { return x.id === editingNoteId; })[0];
+    if (editingNoteId !== null && !existing) { // F9: PATCH 404 (다른 곳에서 삭제됨). 입력과 초안은 그대로 둔다
+      conflictPanel.hidden = true;
+      noteError.textContent = '노트를 찾을 수 없습니다';
+      noteError.hidden = false;
+      return;
+    }
+    if (existing && expected !== undefined && existing.updated_at !== expected) { // F9: 409 conflict. 저장하지 않고 입력은 그대로
+      conflictCurrent = JSON.parse(JSON.stringify(existing));
+      document.getElementById('conflict-info').textContent = '서버 버전: "' + conflictCurrent.title + '" · 수정 ' + fmtKst(conflictCurrent.updated_at) + ' (KST)';
+      conflictPanel.hidden = false;
+      conflictPanel.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    conflictPanel.hidden = true; conflictCurrent = null;
     var tags = [];
     document.getElementById('note-tags').value.split(',').forEach(function (t) {
       t = t.trim().toLowerCase();
       if (t && tags.indexOf(t) < 0) tags.push(t);
     });
     var kind = document.querySelector('input[name="kind"]:checked').value;
-    var now = TODAY + 'T12:00:00Z';
     var isOpen = document.getElementById('note-open').checked;
-    var n = editingNoteId === null ? null : notes.filter(function (x) { return x.id === editingNoteId; })[0];
+    var n = existing;
+    var now = nextStamp(n ? n.updated_at : '');
     if (n) {
       n.kind = kind; n.title = title; n.body = noteBody.value; n.tags = tags; n.is_open = isOpen; n.updated_at = now;
     } else {
@@ -1144,6 +1187,47 @@
     refreshNotes();
     renderNoteView();
     location.hash = '#s5';
+  }
+  document.getElementById('conflict-overwrite').addEventListener('click', function () {
+    if (conflictCurrent) saveNote(conflictCurrent.updated_at); // error.current.updated_at을 expected_updated_at으로 다시 저장
+  });
+  document.getElementById('conflict-load').addEventListener('click', function () {
+    if (!conflictCurrent || !confirm('지금 입력을 버리고 서버 버전을 불러올까요?')) return;
+    var c = conflictCurrent; // error.current로 폼을 채우고 초안을 지운다
+    document.querySelectorAll('input[name="kind"]').forEach(function (r) { r.checked = r.value === c.kind; });
+    noteTitle.value = c.title;
+    document.getElementById('note-tags').value = c.tags.join(', ');
+    document.getElementById('note-open').checked = c.is_open;
+    noteBody.value = c.body;
+    loadedValues = snapshot(); loadedBase = c.updated_at;
+    clearTimeout(draftTimer); removeDraft(draftKey());
+    draftBanner.hidden = true; pendingDraft = null;
+    conflictPanel.hidden = true; conflictCurrent = null;
+    noteError.hidden = true;
+    updateCounter(); showEditor();
+  });
+
+  // 목업 전용: 다른 기기에서 이 노트를 고치거나 지운 상황을 만든다 (상황 재현 패널)
+  function mockNote(text) { var p = document.getElementById('mock-note'); p.textContent = text; p.hidden = false; }
+  function mockEditorNote() {
+    if (!editorActive || editingNoteId === null) { mockNote('노트 수정 화면(S4)을 연 채로 눌러 주세요'); return null; }
+    return notes.filter(function (x) { return x.id === editingNoteId; })[0] || null;
+  }
+  document.getElementById('mock-other-edit').addEventListener('click', function () {
+    var n = mockEditorNote();
+    if (!n) { if (editorActive && editingNoteId !== null) mockNote('이미 서버에 없는 노트입니다'); return; }
+    if (n.title.indexOf(' (다른 기기)') < 0) n.title += ' (다른 기기)';
+    n.body = '다른 기기에서 고친 본문';
+    n.updated_at = nextStamp(n.updated_at);
+    saveNotes(); renderNotes();
+    mockNote('서버의 노트가 바뀌었습니다. 이제 저장하면 409가 옵니다');
+  });
+  document.getElementById('mock-other-delete').addEventListener('click', function () {
+    var n = mockEditorNote();
+    if (!n) return;
+    notes = notes.filter(function (x) { return x.id !== n.id; });
+    refreshNotes();
+    mockNote('서버에서 노트가 지워졌습니다. 이제 저장하면 404가 옵니다');
   });
 
   // ---- S5 노트 보기 ----
