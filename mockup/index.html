@@ -209,6 +209,10 @@
   .topbar-actions .btn, .note-view .form-actions .btn { text-decoration: none; display: inline-flex; align-items: center; }
   .render-fail-notice { margin: 0 0 8px; color: var(--danger); font-weight: 600; }
   .render-fail-raw { margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 14px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+  .notice { margin: 0 0 12px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); font-size: 14px; }
+  .draft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+  .draft-banner span { flex: 1; min-width: 160px; }
+  .draft-banner .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }
   /* 목업 전용 상황 재현 패널 */
   .mock-panel { position: fixed; right: 12px; bottom: 12px; z-index: 10; max-width: calc(100vw - 24px); width: 280px; padding: 8px 12px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); font-size: 14px; }
   .mock-panel summary { cursor: pointer; font-weight: 600; }
@@ -223,6 +227,8 @@
   <section id="s1" class="screen-login" aria-labelledby="s1-title">
     <div class="login-card">
       <h1 id="s1-title">Study Log</h1>
+      <!-- F8 -->
+      <p id="login-expired" class="notice" role="status" hidden>로그인이 만료되었습니다. 다시 로그인하세요</p>
       <!-- F5 -->
       <form id="login-form" class="login-form" novalidate>
         <div class="field">
@@ -364,6 +370,13 @@
       <h1 id="s4-title" class="topbar-title">노트 편집</h1>
     </header>
     <div class="page">
+      <!-- F8 -->
+      <div id="draft-banner" class="notice draft-banner" role="status" hidden>
+        <span id="draft-banner-text"></span>
+        <button id="draft-restore" class="btn btn-secondary" type="button">복원</button>
+        <button id="draft-discard" class="btn btn-secondary" type="button">버리기</button>
+      </div>
+      <p id="draft-unavailable" class="notice" role="status" hidden>이 브라우저에서는 초안을 보관할 수 없습니다</p>
       <form id="note-form" class="note-form" novalidate><!-- F3 -->
         <fieldset>
           <legend>유형</legend>
@@ -443,6 +456,8 @@
   <p>목업 전용, 실제 앱에는 없음</p>
   <label class="check"><input id="mock-render-fail" type="checkbox"> 마크다운 렌더 실패 (F7)</label>
   <button id="mock-fail-note" class="btn btn-secondary" type="button">렌더 실패 노트 열기 (&gt; 50,000자)</button>
+  <label class="check"><input id="mock-session-expired" type="checkbox"> 세션 만료 (다음 저장 때 401, F8)</label>
+  <label class="check"><input id="mock-storage-blocked" type="checkbox"> 브라우저 저장소 사용 불가 (F8)</label>
 </details>
 <script>
   // 더미 데이터: design.md 5절 GET /api/subjects 응답 모양. 생성 최신순.
@@ -944,6 +959,127 @@
     document.getElementById('note-cancel').href = cancelHref;
     document.getElementById('note-cancel-top').href = cancelHref;
     document.getElementById('s4-title').textContent = n ? '노트 수정' : '새 노트';
+    startDraftSession(n);
+  }
+
+  // ---- F8 작성 내용 보호: 초안을 localStorage에 둔다 (키 draft:new:{subject_id}, draft:note:{note_id}) ----
+  var CONTEXT_KEY = 'study-log-mockup-editor'; // 새로고침 뒤 어느 노트를 열었는지 (목업이 해시 화면이라 필요)
+  var DRAFT_DELAY_MS = 1000;
+  var loadedValues = null; // 마지막으로 불러오거나 저장한 값
+  var loadedBase = null; // 수정이면 불러온 노트의 updated_at
+  var editorActive = false;
+  var suppressDraft = false; // 저장 성공·버리기 확인 뒤에는 초안을 다시 쓰지 않는다
+  var draftTimer = null;
+  var draftWarned = false;
+  var pendingDraft = null;
+  var mockStorageBlocked = false;
+  var mockSessionExpired = false;
+  var loginExpired = false; // S1 만료 안내 (주소의 expired=1 흉내)
+  var loginNext = ''; // 로그인 뒤 돌아갈 화면 (주소의 next 흉내)
+  var draftBanner = document.getElementById('draft-banner');
+  function draftKey() { return editingNoteId === null ? 'draft:new:' + currentSubjectId : 'draft:note:' + editingNoteId; }
+  function snapshot() {
+    return { kind: document.querySelector('input[name="kind"]:checked').value, title: noteTitle.value,
+      tags_text: document.getElementById('note-tags').value, is_open: document.getElementById('note-open').checked, body: noteBody.value };
+  }
+  function sameValues(a, b) {
+    return a.kind === b.kind && a.title === b.title && a.tags_text === b.tags_text && a.is_open === b.is_open && a.body === b.body;
+  }
+  function hasChanges() { return !!loadedValues && !sameValues(snapshot(), loadedValues); }
+  function readDraft(key) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (raw === null) return null;
+      var d = JSON.parse(raw);
+      if (!d || typeof d !== 'object' || typeof d.title !== 'string' || typeof d.body !== 'string') throw new Error('bad draft');
+      return d;
+    } catch (e) { // 해석에 실패한 초안은 지우고 없는 것으로 본다
+      try { localStorage.removeItem(key); } catch (e2) { /* 저장소를 못 쓰면 그대로 */ }
+      return null;
+    }
+  }
+  function removeDraft(key) { try { localStorage.removeItem(key); } catch (e) { /* 무시 */ } }
+  function writeDraft() {
+    if (!editorActive || suppressDraft) return;
+    var d = snapshot();
+    d.base_updated_at = loadedBase;
+    d.saved_at = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+    try {
+      if (mockStorageBlocked) throw new Error('storage blocked');
+      localStorage.setItem(draftKey(), JSON.stringify(d));
+    } catch (e) { // 저장소 사용 불가·용량 부족: 초안 없이 계속 쓰고 안내는 한 번만
+      if (!draftWarned) { draftWarned = true; document.getElementById('draft-unavailable').hidden = false; }
+    }
+  }
+  function scheduleDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(writeDraft, DRAFT_DELAY_MS); // 입력이 멈추고 1초 뒤
+  }
+  function flushDraft() { clearTimeout(draftTimer); writeDraft(); }
+  function fmtKst(iso) {
+    return new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 16).replace('T', ' ');
+  }
+  function startDraftSession(n) {
+    clearTimeout(draftTimer);
+    editorActive = true; suppressDraft = false;
+    loadedValues = snapshot();
+    loadedBase = n ? n.updated_at : null;
+    pendingDraft = null;
+    draftBanner.hidden = true;
+    document.getElementById('draft-unavailable').hidden = true;
+    try { sessionStorage.setItem(CONTEXT_KEY, JSON.stringify({ noteId: editingNoteId, subjectId: currentSubjectId })); } catch (e) { /* 무시 */ }
+    var d = readDraft(draftKey());
+    if (!d) return;
+    var show = editingNoteId === null
+      ? (d.title !== '' || d.body !== '' || d.tags_text !== '' || d.is_open === true) // 작성: 내용이 있을 때
+      : !sameValues(d, loadedValues); // 수정: 불러온 노트와 다를 때
+    if (!show) { removeDraft(draftKey()); return; } // 같으면 조용히 지운다
+    pendingDraft = d;
+    document.getElementById('draft-banner-text').textContent = '저장하지 않은 초안이 있습니다 (' + fmtKst(d.saved_at) + ')';
+    draftBanner.hidden = false;
+  }
+  document.getElementById('draft-restore').addEventListener('click', function () {
+    var d = pendingDraft;
+    if (!d) return;
+    document.querySelectorAll('input[name="kind"]').forEach(function (r) { r.checked = r.value === d.kind; });
+    noteTitle.value = d.title;
+    document.getElementById('note-tags').value = d.tags_text || '';
+    document.getElementById('note-open').checked = !!d.is_open;
+    noteBody.value = d.body;
+    loadedBase = d.base_updated_at || null; // F9: 복원한 초안이면 초안의 base_updated_at을 쓴다
+    updateCounter();
+    showEditor();
+    draftBanner.hidden = true; pendingDraft = null;
+  });
+  document.getElementById('draft-discard').addEventListener('click', function () {
+    removeDraft(draftKey()); // 입력은 그대로 둔다
+    draftBanner.hidden = true; pendingDraft = null;
+  });
+  document.getElementById('note-form').addEventListener('input', scheduleDraft);
+  document.getElementById('note-form').addEventListener('change', scheduleDraft);
+  function leaveEditor(event) { // 취소·상단 "← 주제": 변경이 있으면 확인 창
+    if (hasChanges() && !confirm('저장하지 않은 내용을 버릴까요?')) { event.preventDefault(); return; }
+    clearTimeout(draftTimer);
+    suppressDraft = true; editorActive = false;
+    removeDraft(draftKey());
+  }
+  document.getElementById('note-cancel').addEventListener('click', leaveEditor);
+  document.getElementById('note-cancel-top').addEventListener('click', leaveEditor);
+  window.addEventListener('beforeunload', function (event) { // 새로고침·탭 닫기: 변경이 있을 때만 이탈 경고
+    if (editorActive && !suppressDraft && hasChanges()) { flushDraft(); event.preventDefault(); event.returnValue = ''; }
+  });
+  window.addEventListener('pagehide', flushDraft); // 이탈 경고가 없는 브라우저(iOS Safari)에서도 초안은 남는다
+  function clearAllDrafts() { // 로그아웃 성공: draft:로 시작하는 키를 모두 지운다
+    try {
+      Object.keys(localStorage).filter(function (k) { return k.indexOf('draft:') === 0; }).forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) { /* 무시 */ }
+  }
+  function restoreEditorAfterReload() { // 새로고침·재로그인으로 #s4가 다시 열리면 같은 노트로 편집기를 연다
+    var ctx = null;
+    try { ctx = JSON.parse(sessionStorage.getItem(CONTEXT_KEY)); } catch (e) { ctx = null; }
+    if (ctx && subjects.some(function (x) { return x.id === ctx.subjectId; })) currentSubjectId = ctx.subjectId;
+    var id = ctx && ctx.noteId !== null && notes.some(function (x) { return x.id === ctx.noteId; }) ? ctx.noteId : null;
+    openEditor(id);
   }
   document.querySelectorAll('input[name="kind"]').forEach(function (r) {
     r.addEventListener('change', function () {
@@ -966,6 +1102,16 @@
   document.getElementById('note-edit-btn').addEventListener('click', function () { openEditor(viewNoteId); });
   document.getElementById('note-form').addEventListener('submit', function (event) { // POST / PATCH
     event.preventDefault();
+    flushDraft(); // F8: 저장 버튼을 누르면 초안을 바로 쓴다
+    if (mockSessionExpired) { // F8: 세션이 끝난 뒤 저장 → 401 → S1 만료 안내, 재로그인 뒤 이 S4로 돌아온다
+      mockSessionExpired = false;
+      document.getElementById('mock-session-expired').checked = false;
+      suppressDraft = true; editorActive = false; // 이탈 경고 없이 이동
+      localStorage.removeItem(SESSION_KEY);
+      loginExpired = true; loginNext = '#s4';
+      location.hash = '#s1';
+      return;
+    }
     var title = noteTitle.value.trim();
     if (!title || title.length > 200) { // 서버였다면 422 fields.title
       noteError.textContent = TITLE_ERROR;
@@ -991,6 +1137,10 @@
       notes.push(n);
     }
     viewNoteId = n.id;
+    clearTimeout(draftTimer);
+    suppressDraft = true; editorActive = false; // 저장 성공: 초안을 지우고 이탈 경고 없이 이동
+    removeDraft('draft:new:' + n.subject_id);
+    removeDraft('draft:note:' + n.id);
     refreshNotes();
     renderNoteView();
     location.hash = '#s5';
@@ -1044,9 +1194,14 @@
       document.getElementById('s6-404').hidden = status !== 404;
       document.getElementById('s6-500').hidden = status !== 500;
     }
+    if (editorActive && id !== 's4') { flushDraft(); editorActive = false; } // F8: 페이지를 떠날 때 초안을 바로 쓴다
+    if (id === 's4' && !editorActive) restoreEditorAfterReload(); // F8: 새로고침·재로그인 뒤 같은 노트를 다시 연다
     document.querySelectorAll('#app > section').forEach(function (sec) { sec.hidden = sec !== target; });
     document.getElementById('mock-panel').hidden = id === 's1'; // 목업 전용 패널은 로그인 뒤에만
-    if (id === 's1') document.getElementById('login-password').focus();
+    if (id === 's1') {
+      document.getElementById('login-expired').hidden = !loginExpired; // 주소에 expired=1이 있을 때의 안내
+      document.getElementById('login-password').focus();
+    }
   }
 
   // 목업 전용 상황 재현 패널 (F7): 렌더 실패를 켜고 끄고, 50,000자 '>' 노트를 열어 본다.
@@ -1102,7 +1257,11 @@
     showLoginError(null);
     input.value = '';
     localStorage.setItem(SESSION_KEY, String(Date.now())); // 204 + Set-Cookie
-    location.hash = '#s2';
+    var next = loginNext === '#s4' ? '#s4' : '#s2'; // next는 허용된 화면만 따른다
+    loginExpired = false; loginNext = '';
+    document.getElementById('login-expired').hidden = true;
+    location.hash = next;
+    if (next === '#s4') showScreen(); // 이미 #s4였던 경우에도 화면을 다시 정한다
   });
   // F6: GET /api/subjects/{id}/export 흉내. 마크다운을 만들어 Blob으로 내려받게 한다.
   function buildExport(sub) {
@@ -1142,6 +1301,13 @@
   });
   document.getElementById('logout-btn').addEventListener('click', function () { // POST /api/logout → 204
     localStorage.removeItem(SESSION_KEY);
+    clearAllDrafts(); // F8: 로그아웃에 성공하면 초안을 모두 지운다
+    loginExpired = false; loginNext = '';
+  });
+  document.getElementById('mock-session-expired').addEventListener('change', function (event) { mockSessionExpired = event.target.checked; });
+  document.getElementById('mock-storage-blocked').addEventListener('change', function (event) {
+    mockStorageBlocked = event.target.checked;
+    draftWarned = false; // 다시 켜면 안내를 한 번 더 보일 수 있다
   });
 </script>
 </body>
