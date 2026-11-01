@@ -1,6 +1,8 @@
-// S1 로그인. POST /api/login 을 부른다. (F5, F11)
+// S1 로그인. POST /api/login 을 부른다. (F5, F8, F11)
 import { BAD_RESPONSE_MESSAGE, timedFetch } from './common.js';
 
+// 로그인 뒤 돌아갈 화면. 서버가 허용 경로만 data-next에 넣어 준다. 비어 있으면 S2다.
+const nextPath = document.getElementById('s1').dataset.next || '/';
 const form = document.getElementById('login-form');
 const input = document.getElementById('login-password');
 const submitBtn = form.querySelector('button[type="submit"]');
@@ -46,7 +48,7 @@ form.addEventListener('submit', async (event) => {
   const data = result.bodyOk ? result.body : null;
   if (response.status === 204) {
     input.value = '';
-    location.href = '/'; // 이동이 끝날 때까지 버튼을 꺼 둔다
+    location.href = nextPath; // 이동이 끝날 때까지 버튼을 꺼 둔다
     return;
   }
   if (response.ok) {

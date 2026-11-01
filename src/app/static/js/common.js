@@ -44,7 +44,27 @@ export function isUsableSuccess(response, body, bodyOk) {
   return bodyOk && body !== null && typeof body === 'object';
 }
 
-// JSON API 호출. 401이면 /login으로 보내고 응답을 돌려주지 않는다(페이지가 이동한다).
+// 401(세션 만료)을 받았을 때 이동하기 직전에 부를 함수. S4가 초안을 저장하고 이탈 경고를 끄는 데 쓴다(F8).
+let beforeLoginRedirect = null;
+
+export function onBeforeLoginRedirect(fn) {
+  beforeLoginRedirect = fn;
+}
+
+// 401 처리는 여기 하나로 모은다(F8, F11). 하던 일이 있으면 먼저 정리하고,
+// 만료 안내와 현재 경로를 붙여 S1로 보낸다. 로그인 뒤 돌아갈 경로의 검사는 서버가 한다.
+export function redirectToLogin() {
+  if (beforeLoginRedirect) {
+    try {
+      beforeLoginRedirect();
+    } catch {
+      // 정리에 실패해도 이동은 막지 않는다
+    }
+  }
+  location.href = '/login?expired=1&next=' + encodeURIComponent(location.pathname);
+}
+
+// JSON API 호출. 401이면 S1(만료 안내)로 보내고 응답을 돌려주지 않는다(페이지가 이동한다).
 // 실패하면 { ok: false, status, data, message? }를 돌려준다. 연결 실패와 시간 초과는 status 0,
 // 2xx인데 JSON이 아닌 응답은 그 상태 코드로 오며, 둘 다 message에 화면에 보일 문구가 있다.
 // ok가 true이면 204가 아닌 한 data는 JSON 객체다.
@@ -58,7 +78,7 @@ export async function api(method, url, body) {
   if (result.failure) return { ok: false, status: 0, data: null, message: result.failure };
   const { response } = result;
   if (response.status === 401) {
-    location.href = '/login';
+    redirectToLogin();
     return new Promise(() => {});
   }
   if (response.ok && !isUsableSuccess(response, result.body, result.bodyOk)) {

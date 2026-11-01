@@ -221,3 +221,9 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .error-screen h2 { margin: 0 0 8px; }
 .error-desc { margin: 0; color: var(--muted); }
 .error-screen .btn { display: inline-flex; align-items: center; text-decoration: none; }
+
+/* F8 안내 줄: 만료 안내, 초안 안내, 초안 보관 불가 */
+.notice { margin: 0 0 12px; padding: 10px 12px; background: var(--surface); border: 1px solid var(--accent); border-radius: var(--radius); font-size: 14px; }
+.draft-banner { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.draft-banner span { flex: 1; min-width: 160px; }
+.draft-banner .btn { min-height: 36px; padding: 4px 12px; font-size: 14px; }

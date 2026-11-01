@@ -10,7 +10,14 @@
   </header>
   <div class="page">
     <p id="note-load-error" class="form-error" role="alert" hidden></p>
-    <form id="note-form" class="note-form" novalidate{% if note_id is not none %} hidden{% endif %}><!-- F3 -->
+    <!-- F8 -->
+    <div id="draft-banner" class="notice draft-banner" role="status" hidden>
+      <span id="draft-banner-text"></span>
+      <button id="draft-restore" class="btn btn-secondary" type="button">복원</button>
+      <button id="draft-discard" class="btn btn-secondary" type="button">버리기</button>
+    </div>
+    <p id="draft-unavailable" class="notice" role="status" hidden>이 브라우저에서는 초안을 보관할 수 없습니다</p>
+    <form id="note-form" class="note-form" autocomplete="off" novalidate{% if note_id is not none %} hidden{% endif %}><!-- F3 -->
       <fieldset>
         <legend>유형</legend>
         <div class="radio-row">

@@ -1544,3 +1544,310 @@ def test_f11_s6_404_and_500_differ_only_in_wording(f11_boom_client: TestClient):
         assert F11_APP_NAME in response.text
         assert 'href="/"' in response.text
         assert F11_HOME_LINK_TEXT in response.text
+
+
+# ===========================================================================
+# F8: 작성 내용 보호 (서버가 정하는 부분: 로그인 화면의 next 검사와 만료 안내)
+#
+# 초안 보관·복원, 이탈 확인, 401 때 초안 저장과 이동은 브라우저 동작이라
+# 메인 세션이 실제 브라우저로 확인한다. 여기서는 GET /login이 내려주는 값만 확인한다.
+#
+# 해석(F8)
+# - GET /login은 `<section id="s1">`의 `data-next`에 검사를 통과한 경로를 넣고,
+#   통과하지 못했거나 `next`가 없으면 빈 값을 넣는다.
+# - `#login-expired`는 `expired=1`일 때만 `hidden` 없이 내려간다.
+# - 허용 경로는 쿼리나 조각이 없는 정확한 경로뿐이다.
+# ===========================================================================
+
+from html.parser import HTMLParser  # noqa: E402
+
+F8_EXPIRED_MESSAGE = "로그인이 만료되었습니다. 다시 로그인하세요"
+
+F8_ALLOWED_NEXT = [
+    "/",
+    "/subjects/12",
+    "/subjects/12/notes/new",
+    "/notes/12",
+    "/notes/12/edit",
+]
+
+F8_REJECTED_NEXT = [
+    "https://evil.example",
+    "http://evil.example/notes/1",
+    "//evil.example",
+    "///evil.example",
+    "\\\\evil.example",
+    "\\evil.example",
+    "/\\evil.example",
+    "javascript:alert(1)",
+    "/login",
+    "/api/subjects",
+    "/static/app.css",
+    "/subjects",
+    "/subjects/abc",
+    "/subjects/0",
+    "/subjects/-1",
+    "/subjects/1.5",
+    "/notes/1/edit/x",
+    "/notes/1/",
+    "/subjects/1?x=1",
+    "/subjects/1#a",
+    " /subjects/1",
+    "/subjects/1\n",
+    "/" + "a" * 5000,
+    "/notes/" + "9" * 30,
+    "/notes/１",
+    "",
+    "%2F%2Fevil.example",
+]
+
+
+class _LoginPageParser(HTMLParser):
+    """s1 섹션과 #login-expired 요소의 속성, #login-expired 안의 글자를 모은다."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.s1_attrs: dict[str, str | None] | None = None
+        self.expired_attrs: dict[str, str | None] | None = None
+        self.expired_text = ""
+        self._expired_tag: str | None = None
+        self._expired_depth = 0
+
+    def handle_starttag(self, tag, attrs):
+        attr_map = dict(attrs)
+        if attr_map.get("id") == "s1" and self.s1_attrs is None:
+            self.s1_attrs = attr_map
+        if self._expired_tag is not None:
+            if tag == self._expired_tag:
+                self._expired_depth += 1
+        elif attr_map.get("id") == "login-expired" and self.expired_attrs is None:
+            self.expired_attrs = attr_map
+            self._expired_tag = tag
+            self._expired_depth = 1
+
+    def handle_endtag(self, tag):
+        if self._expired_tag is not None and tag == self._expired_tag:
+            self._expired_depth -= 1
+            if self._expired_depth == 0:
+                self._expired_tag = None
+
+    def handle_data(self, data):
+        if self._expired_tag is not None:
+            self.expired_text += data
+
+
+def f8_parse_login(response) -> _LoginPageParser:
+    assert response.status_code == 200, response.text[:300]
+    assert response.headers["content-type"].startswith("text/html")
+    parser = _LoginPageParser()
+    parser.feed(response.text)
+    parser.close()
+    return parser
+
+
+def f8_data_next(response) -> str:
+    """로그인 화면 HTML에서 s1 섹션의 data-next 값을 엔티티를 푼 채로 꺼낸다."""
+    parser = f8_parse_login(response)
+    assert parser.s1_attrs is not None, '<section id="s1">가 있어야 한다'
+    assert "data-next" in parser.s1_attrs, "s1 섹션에 data-next 속성이 있어야 한다"
+    value = parser.s1_attrs["data-next"]
+    return "" if value is None else value
+
+
+def f8_open_login(client: TestClient, **params):
+    return client.get("/login", params=params, follow_redirects=False)
+
+
+# --- next 허용 경로 ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", F8_ALLOWED_NEXT, ids=lambda p: p)
+def test_f8_login_data_next_keeps_allowed_path(client: TestClient, path: str):
+    response = f8_open_login(client, next=path)
+    assert f8_data_next(response) == path
+
+
+@pytest.mark.parametrize("path", F8_ALLOWED_NEXT, ids=lambda p: p)
+def test_f8_login_data_next_keeps_allowed_path_together_with_expired(
+    client: TestClient, path: str
+):
+    response = f8_open_login(client, expired="1", next=path)
+    assert f8_data_next(response) == path
+
+
+def test_f8_login_data_next_decodes_percent_encoded_allowed_path(client: TestClient):
+    # 서버가 쿼리를 디코드한 결과 기준으로 검사한다.
+    response = client.get("/login?next=%2Fsubjects%2F12%2Fnotes%2Fnew", follow_redirects=False)
+    assert f8_data_next(response) == "/subjects/12/notes/new"
+
+
+# --- next 거부 경로 ----------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    F8_REJECTED_NEXT,
+    ids=lambda p: repr(p) if len(p) < 60 else f"long-{len(p)}-chars",
+)
+def test_f8_login_data_next_is_empty_for_rejected_path(client: TestClient, path: str):
+    response = f8_open_login(client, next=path)
+    assert f8_data_next(response) == ""
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["https://evil.example", "//evil.example", "/api/subjects", "/subjects/abc"],
+    ids=lambda p: p,
+)
+def test_f8_login_data_next_is_empty_for_rejected_path_with_expired(
+    client: TestClient, path: str
+):
+    response = f8_open_login(client, expired="1", next=path)
+    assert f8_data_next(response) == ""
+
+
+def test_f8_login_data_next_is_empty_for_percent_encoded_open_redirect(client: TestClient):
+    # 주소에 %2F%2F로 보낸 값은 서버가 `//evil.example`로 디코드하므로 거부된다.
+    response = client.get("/login?next=%2F%2Fevil.example", follow_redirects=False)
+    assert f8_data_next(response) == ""
+    response = client.get("/login?next=https%3A%2F%2Fevil.example", follow_redirects=False)
+    assert f8_data_next(response) == ""
+
+
+def test_f8_login_data_next_is_empty_for_encoded_query_after_decoding(client: TestClient):
+    # 디코드하면 `/subjects/1?x=1`이므로 쿼리가 있어 거부된다.
+    response = client.get("/login?next=%2Fsubjects%2F1%3Fx%3D1", follow_redirects=False)
+    assert f8_data_next(response) == ""
+    # 디코드하면 `/subjects/1#a`
+    response = client.get("/login?next=%2Fsubjects%2F1%23a", follow_redirects=False)
+    assert f8_data_next(response) == ""
+
+
+def test_f8_login_data_next_is_empty_when_next_is_missing(client: TestClient):
+    for params in ({}, {"expired": "1"}):
+        response = f8_open_login(client, **params)
+        assert f8_data_next(response) == "", params
+
+
+def test_f8_login_with_repeated_next_never_uses_an_unsafe_value(client: TestClient):
+    response = client.get(
+        "/login?next=/notes/1&next=//evil.example", follow_redirects=False
+    )
+    assert f8_data_next(response) in ("", "/notes/1")
+    response = client.get(
+        "/login?next=//evil.example&next=/notes/1", follow_redirects=False
+    )
+    assert f8_data_next(response) in ("", "/notes/1")
+
+
+# --- next 값이 HTML로 새지 않는다 -------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        '"><script>alert(1)</script>',
+        "'><script>alert(1)</script>",
+        '/notes/1"><script>alert(1)</script>',
+        '" onmouseover="alert(1)',
+        "</section><script>alert(1)</script>",
+        "<img src=x onerror=alert(1)>",
+    ],
+    ids=["dq-script", "sq-script", "valid-prefix-script", "attr-injection", "close-section", "img"],
+)
+def test_f8_login_next_markup_does_not_leak_into_html(client: TestClient, payload: str):
+    for extra in ({}, {"expired": "1"}):
+        response = f8_open_login(client, next=payload, **extra)
+        assert response.status_code == 200
+        lowered = response.text.lower()
+        assert "<script>alert" not in lowered
+        assert "<img src=x" not in lowered
+        assert 'onmouseover="alert' not in lowered
+        # 거부되었으므로 data-next는 비어 있고 페이지 구조도 그대로다.
+        assert f8_data_next(response) == ""
+
+
+# --- 세션 만료 안내 -----------------------------------------------------------------
+
+
+def test_f8_login_expired_notice_is_visible_when_expired_is_1(client: TestClient):
+    parser = f8_parse_login(f8_open_login(client, expired="1"))
+    assert parser.expired_attrs is not None, "#login-expired 요소가 있어야 한다"
+    assert "hidden" not in parser.expired_attrs
+    assert F8_EXPIRED_MESSAGE in " ".join(parser.expired_text.split())
+
+
+def test_f8_login_expired_notice_is_visible_with_expired_and_next(client: TestClient):
+    parser = f8_parse_login(f8_open_login(client, expired="1", next="/notes/12/edit"))
+    assert parser.expired_attrs is not None
+    assert "hidden" not in parser.expired_attrs
+    assert F8_EXPIRED_MESSAGE in " ".join(parser.expired_text.split())
+
+
+def test_f8_login_expired_notice_is_hidden_when_expired_is_missing(client: TestClient):
+    parser = f8_parse_login(client.get("/login", follow_redirects=False))
+    assert parser.expired_attrs is not None, "#login-expired 요소는 항상 있어야 한다"
+    assert "hidden" in parser.expired_attrs
+
+
+def test_f8_login_expired_notice_is_hidden_with_next_only(client: TestClient):
+    parser = f8_parse_login(f8_open_login(client, next="/notes/12"))
+    assert parser.expired_attrs is not None
+    assert "hidden" in parser.expired_attrs
+
+
+@pytest.mark.parametrize(
+    "value", ["0", "true", "True", "yes", "2", "01", "", "1abc"], ids=lambda v: repr(v)
+)
+def test_f8_login_expired_notice_is_hidden_for_values_other_than_1(
+    client: TestClient, value: str
+):
+    parser = f8_parse_login(f8_open_login(client, expired=value))
+    assert parser.expired_attrs is not None
+    assert "hidden" in parser.expired_attrs, value
+
+
+# --- 로그인 상태와 미로그인 이동 ---------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "params",
+    [
+        {"expired": "1", "next": "/notes/1"},
+        {"next": "/notes/1"},
+        {"expired": "1"},
+        {"next": "//evil.example"},
+    ],
+    ids=["expired+next", "next", "expired", "bad-next"],
+)
+def test_f8_login_page_when_logged_in_redirects_to_root(auth_client: TestClient, params: dict):
+    response = auth_client.get("/login", params=params, follow_redirects=False)
+    assert response.status_code == 302, response.text[:300]
+    assert response.headers["location"] == "/"
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/subjects/1", "/subjects/1/notes/new", "/notes/1", "/notes/1/edit"],
+    ids=lambda p: p,
+)
+def test_f8_logged_out_screen_redirects_to_plain_login_without_query(
+    client: TestClient, path: str
+):
+    response = client.get(path, follow_redirects=False)
+    assert response.status_code == 302, response.text[:300]
+    # 서버가 expired나 next 쿼리를 붙이지 않는다(붙이는 것은 브라우저 JS의 일이다).
+    assert response.headers["location"] == "/login"
+
+
+def test_f8_logged_out_note_edit_redirects_to_plain_login(client: TestClient):
+    response = client.get("/notes/1/edit", follow_redirects=False)
+    assert response.status_code == 302
+    assert response.headers["location"] == "/login"
+
+
+def test_f8_login_page_is_html_200_when_logged_out(client: TestClient):
+    response = client.get("/login", follow_redirects=False)
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert "Study Log" in response.text

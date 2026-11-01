@@ -1,5 +1,7 @@
 // S4 노트 편집(작성·수정 공용). POST /api/subjects/{id}/notes, GET/PATCH /api/notes/{id} (F3)
-import { api, clearErrors, errorMessage, showErrors } from './common.js';
+// 저장하기 전의 글은 브라우저에 초안으로 보관한다(F8, draft.js).
+import { api, clearErrors, errorMessage, onBeforeLoginRedirect, showErrors } from './common.js';
+import { createDraftSession } from './draft.js';
 import { renderMarkdown } from './markdown.js';
 
 const DEBUG_TEMPLATE = '## 문제상황\n\n## 원인\n\n## 해결\n';
@@ -40,6 +42,49 @@ function setCancelTarget(href) {
 function selectedKind() {
   return form.querySelector('input[name="kind"]:checked').value;
 }
+
+function snapshot() {
+  return {
+    kind: selectedKind(),
+    title: titleInput.value,
+    tags_text: tagsInput.value,
+    is_open: openInput.checked,
+    body: bodyInput.value,
+  };
+}
+
+// 초안 복원: 입력 칸에 값(.value, .checked)으로만 넣는다.
+function applyValues(v) {
+  for (const r of kindRadios) r.checked = r.value === v.kind;
+  titleInput.value = v.title;
+  tagsInput.value = v.tags_text;
+  openInput.checked = v.is_open;
+  bodyInput.value = v.body;
+  updateCounter();
+  showEditor();
+}
+
+const draft = createDraftSession({
+  noteId,
+  subjectId: () => subjectId,
+  snapshot,
+  apply: applyValues,
+  elements: {
+    banner: document.getElementById('draft-banner'),
+    bannerText: document.getElementById('draft-banner-text'),
+    restore: document.getElementById('draft-restore'),
+    discard: document.getElementById('draft-discard'),
+    unavailable: document.getElementById('draft-unavailable'),
+    form,
+  },
+  leaveLinks: [document.getElementById('note-cancel'), document.getElementById('note-cancel-top')],
+});
+
+// 세션이 끝나 401을 받으면 초안을 바로 저장하고, 이탈 경고 없이 S1로 이동한다.
+onBeforeLoginRedirect(() => {
+  draft.flush();
+  draft.stop();
+});
 
 function fill(n) {
   for (const r of kindRadios) r.checked = r.value === n.kind;
@@ -83,6 +128,7 @@ form.addEventListener('submit', async (event) => {
   event.preventDefault();
   clearErrors(form);
   submitBtn.disabled = true;
+  draft.flushForSave(); // 저장 버튼을 누르면 지금 입력을 초안에 바로 쓴다(안내 줄이 떠 있으면 닫는다)
   // 검증은 서버가 한다. 제목·본문은 입력한 그대로 보낸다.
   const payload = {
     kind: selectedKind(),
@@ -102,17 +148,25 @@ form.addEventListener('submit', async (event) => {
     showErrors(form, res, '저장하지 못했습니다');
     return;
   }
+  draft.markSaved(); // 저장 성공: 초안을 지우고 이탈 경고 없이 이동한다
   location.href = '/notes/' + res.data.id;
 });
 
-// 저장에 성공하면 버튼을 끈 채로 페이지를 떠난다. 뒤로 가기로 bfcache에서 복원되면 스크립트가 다시 돌지 않으므로 여기서 다시 켠다.
+// 뒤로 가기로 브라우저 캐시(bfcache)에서 복원되면 스크립트가 다시 돌지 않아 저장 버튼, 초안 저장, 이탈 경고가
+// 꺼진 채일 수 있다(저장 성공, 세션 만료, 취소 수락 뒤). 페이지를 새로 읽어 처음부터 시작한다.
+// 남은 초안은 저장소에 있으므로 안내 줄로 이어진다. 새로 읽을 때 이탈 경고가 뜨지 않게 먼저 세션을 끈다.
 window.addEventListener('pageshow', (event) => {
-  if (event.persisted) submitBtn.disabled = false;
+  if (!event.persisted) return;
+  draft.stop();
+  location.reload();
 });
 
 async function init() {
   updateCounter();
-  if (!noteId) return;
+  if (!noteId) {
+    draft.start(null);
+    return;
+  }
   heading.textContent = '노트 수정';
   const res = await api('GET', '/api/notes/' + noteId);
   if (!res.ok) {
@@ -123,6 +177,7 @@ async function init() {
   }
   subjectId = String(res.data.subject_id);
   fill(res.data);
+  draft.start(res.data.updated_at);
   setCancelTarget('/notes/' + noteId); // 취소: 수정이면 S5
   form.hidden = false;
   titleInput.focus();

@@ -4,6 +4,7 @@ HTML 페이지는 뼈대만 내려주고, 데이터는 페이지의 JS가 API로
 경로 id 검증보다 먼저 돌므로 id가 정수가 아니어도 미로그인이면 302다.
 """
 
+import re
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -16,6 +17,25 @@ from app.deps import IdPath
 TEMPLATES_DIR = Path(__file__).resolve().parent.parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+# 로그인 뒤 돌아갈 수 있는 화면(F8). 로그인이 필요한 화면의 정확한 경로뿐이다.
+# [0-9]만 쓰고(\d는 다른 문자의 숫자도 받는다) fullmatch로 줄바꿈·쿼리·조각이 붙은 값을 거른다.
+_NEXT_PATH = re.compile(r"/|/subjects/([1-9][0-9]*)(/notes/new)?|/notes/([1-9][0-9]*)(/edit)?")
+_MAX_ID = 2**63 - 1  # IdPath와 같은 범위
+
+
+def safe_next_path(value: str | None) -> str:
+    """`next` 쿼리가 허용된 화면 경로면 그대로, 아니면 빈 문자열(S2로 간다)."""
+    if not value or len(value) > 64:
+        return ""
+    match = _NEXT_PATH.fullmatch(value)
+    if match is None:
+        return ""
+    for ident in (match.group(1), match.group(3)):
+        if ident is not None and int(ident) > _MAX_ID:
+            return ""
+    return value
+
+
 router = APIRouter(tags=["pages"], include_in_schema=False)
 # 로그인이 필요한 화면. S1(/login)은 여기에 넣지 않는다.
 protected = APIRouter(dependencies=[Depends(require_page_login)])
@@ -26,7 +46,12 @@ def login_page(request: Request) -> Response:
     # S1. 로그인 상태면 /로 이동
     if is_logged_in(request):
         return RedirectResponse("/", status_code=302)
-    return templates.TemplateResponse(request, "login.html")
+    # expired=1이면 세션 만료 안내를 보이고, 로그인 뒤 돌아갈 next는 허용된 경로만 내려준다(F8)
+    context = {
+        "expired": request.query_params.get("expired") == "1",
+        "next_path": safe_next_path(request.query_params.get("next")),
+    }
+    return templates.TemplateResponse(request, "login.html", context)
 
 
 @protected.get("/", response_class=HTMLResponse)

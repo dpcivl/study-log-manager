@@ -1,5 +1,6 @@
 // S2 주제 목록. GET/POST /api/subjects (F1)
 import { api, clearErrors, dday, el, errorMessage, formatHours, showErrors, todayKst } from './common.js';
+import { clearAllDrafts } from './draft.js';
 
 const list = document.getElementById('topic-list');
 const empty = document.getElementById('topic-empty');
@@ -88,6 +89,7 @@ logoutBtn.addEventListener('click', async () => {
   logoutError.hidden = true; // 다시 누르면 지난 문구를 지운다
   const res = await api('POST', '/api/logout');
   if (res.ok) {
+    clearAllDrafts(); // F8: 로그아웃에 성공하면 초안을 모두 지운다
     location.href = '/login'; // 이동이 끝날 때까지 버튼을 꺼 둔다
     return;
   }

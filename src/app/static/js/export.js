@@ -1,5 +1,5 @@
 // S3 상단 바의 내보내기. GET /api/subjects/{id}/export (F6)
-import { BAD_RESPONSE_MESSAGE, errorMessage, timedFetch } from './common.js';
+import { BAD_RESPONSE_MESSAGE, errorMessage, redirectToLogin, timedFetch } from './common.js';
 
 const FALLBACK_NAME = 'subject.md';
 
@@ -38,7 +38,7 @@ export function initExport(subjectId) {
       }
       const { response } = result;
       if (response.status === 401) {
-        location.href = '/login';
+        redirectToLogin();
         return;
       }
       if (!response.ok) {
