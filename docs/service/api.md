@@ -3,7 +3,7 @@
 ## 공통 규칙
 - 모든 `/api/*` 요청·응답은 JSON(`Content-Type: application/json`)이다. F6 내보내기만 `text/markdown`.
 - 로그인·로그아웃을 제외한 모든 API는 `session` 쿠키가 유효해야 한다. 없거나 만료면 `401 {"error":{"code":"unauthorized","message":"로그인이 필요합니다"}}`.
-- 오류 응답은 모두 `{"error":{"code": string, "message": string, "fields"?: {필드명: 메시지}, "retry_after"?: 초}}` 모양이다. `fields`는 422에서만, `retry_after`는 429와 503 `storage_busy`에서만 붙는다. 검증 실패는 422, 없는 자원은 404.
+- 오류 응답은 모두 `{"error":{"code": string, "message": string, "fields"?: {필드명: 메시지}, "retry_after"?: 초}}` 모양이다. `fields`는 422에서만, `retry_after`는 429와 503 `storage_busy`에서만, `current`는 409에서만 붙는다. 검증 실패는 422, 없는 자원은 404.
 - DB를 쓰는 모든 API는 저장소 장애에서 503을 돌려준다(아래 "F10 저장소 장애"). 표의 오류 응답 칸에는 따로 적지 않는다.
 - 본문이 있는 POST·PATCH는 `Content-Type: application/json`이어야 한다. 아니면 `415 {"error":{"code":"unsupported_media_type","message":"JSON 형식으로 보내야 합니다"}}`.
 - 날짜는 `YYYY-MM-DD`, 시각은 ISO 8601 UTC(`2026-10-31T11:20:00Z`). 만들 수 없는 날짜(`0000-01-01` 등)는 422다.
@@ -180,7 +180,7 @@ PATCH 요청 `{ "minutes": 60 }` → 200 StudySession. DELETE → 204. 없으면
 |---|---|---|---|---|---|
 | F3 | POST | /api/subjects/{id}/notes | `{kind, title, body?, tags?, is_open?}` | 201 Note | 404 / 422 |
 | F3 | GET | /api/notes/{id} | 없음 | 200 Note | 404 |
-| F3 | PATCH | /api/notes/{id} | `{kind?, title?, body?, tags?, is_open?}` | 200 Note | 404 / 422 |
+| F3, F9 | PATCH | /api/notes/{id} | `{kind?, title?, body?, tags?, is_open?, expected_updated_at?}` | 200 Note | 404 / 409 conflict / 422 |
 | F3 | DELETE | /api/notes/{id} | 없음 | 204 | 404 |
 
 ### F3 POST /api/subjects/{id}/notes
@@ -216,6 +216,39 @@ PATCH 요청 예(미해결 질문에 답을 채움)
 { "body": "isna()는 isnull()의 별칭이다. 동작이 같고 R 사용자를 위해 둘 다 둔 것", "is_open": false }
 ```
 성공 200: Note 전체(updated_at 갱신). DELETE → 204. 없으면 404 `{"error":{"code":"not_found","message":"노트를 찾을 수 없습니다"}}`
+
+### F9 PATCH /api/notes/{id} 수정 충돌
+요청 예
+```json
+{ "title": "csv 저장", "body": "수정한 본문", "expected_updated_at": "2026-10-31T11:25:00Z" }
+```
+- `expected_updated_at`은 선택이다. 보내지 않으면 충돌을 검사하지 않고 F3 그대로 동작한다.
+- 보내면 저장된 `updated_at`을 응답과 같은 표기(초 단위 `YYYY-MM-DDTHH:MM:SSZ`)로 바꿔 글자 그대로 비교한다. 다르면 아무것도 저장하지 않고 409다.
+- 같은 1초 안에 일어난 두 저장은 구분하지 못한다. 사용자 1명이라 받아들인다.
+- `expected_updated_at`은 저장 필드가 아니다. 이것만 보내면 일치할 때 아무것도 바꾸지 않고 200 Note이며 `updated_at`도 그대로다.
+- 형식이 틀리면 422 `fields.expected_updated_at: "수정 시각 형식이 올바르지 않습니다"`.
+- 검사 순서는 입력값(422), 없는 노트(404), 충돌(409)이다.
+
+오류 409
+```json
+{
+  "error": {
+    "code": "conflict",
+    "message": "다른 곳에서 먼저 수정된 노트입니다",
+    "current": {
+      "id": 7,
+      "subject_id": 1,
+      "kind": "remember",
+      "title": "csv 저장 시 인덱스 제외",
+      "body": "다른 기기에서 고친 본문",
+      "tags": ["pandas", "csv"],
+      "is_open": false,
+      "created_at": "2026-10-31T11:25:00Z",
+      "updated_at": "2026-10-31T12:02:00Z"
+    }
+  }
+}
+```
 
 ## F4 노트 검색·필터
 

@@ -49,6 +49,15 @@
         <p id="body-counter" class="counter">0 / 50,000자</p>
       </div>
       <p id="note-form-error" class="form-error" role="alert" data-error-for="form" hidden></p>
+      <!-- F9 -->
+      <div id="conflict-panel" class="notice conflict-panel" role="alert" hidden>
+        <p><strong>다른 곳에서 먼저 수정된 노트입니다</strong></p>
+        <p id="conflict-info"></p>
+        <div class="form-actions">
+          <button id="conflict-overwrite" class="btn btn-secondary" type="button">내 글로 덮어쓰기</button>
+          <button id="conflict-load" class="btn btn-secondary" type="button">서버 버전 불러오기</button>
+        </div>
+      </div>
       <div class="form-actions">
         <button class="btn btn-primary" type="submit">저장</button>
         <a id="note-cancel" class="btn btn-secondary" href="{{ '/subjects/%d' % subject_id if subject_id is not none else '/' }}">취소</a>

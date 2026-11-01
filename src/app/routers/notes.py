@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.auth import require_session
 from app.db import get_db
 from app.deps import IdPath, fetch_page, get_subject_or_404
-from app.errors import APIError, not_found
+from app.errors import APIError, conflict, not_found
 from app.models import Note, utcnow
 from app.schemas import NoteCreate, NoteKind, NoteList, NoteOut, NoteUpdate, has_control_chars
 
@@ -137,9 +137,15 @@ def get_note(note_id: IdPath, db: Session = Depends(get_db)) -> NoteOut:
 @router.patch("/notes/{note_id}", response_model=NoteOut)
 def update_note(payload: NoteUpdate, note_id: IdPath, db: Session = Depends(get_db)) -> NoteOut:
     # 보낸 필드만 수정. 보낸 필드가 하나라도 있으면 값이 같아도 updated_at을 갱신한다.
-    # 빈 객체는 아무것도 바꾸지 않는다. 200 Note / 404 / 422
+    # 빈 객체는 아무것도 바꾸지 않는다. 200 Note / 404 / 409 conflict / 422
+    # F9: expected_updated_at을 보냈으면 저장된 updated_at(응답과 같은 표기)과 글자 그대로 비교한다.
+    # 다르면 아무것도 저장하지 않고 409. 검사 순서는 입력값(422), 없는 노트(404), 충돌(409)이다.
     note = _get_note_or_404(db, note_id)
-    changes = payload.model_dump(exclude_unset=True)
+    if "expected_updated_at" in payload.model_fields_set:
+        current = NoteOut.model_validate(note)
+        if payload.expected_updated_at != current.model_dump()["updated_at"]:
+            raise conflict(current.model_dump())
+    changes = payload.model_dump(exclude_unset=True)  # expected_updated_at은 exclude라 빠진다
     for field, value in changes.items():
         setattr(note, field, value)
     if changes:

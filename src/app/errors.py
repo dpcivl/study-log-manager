@@ -26,6 +26,7 @@ class APIError(Exception):
         message: str,
         fields: dict[str, str] | None = None,
         retry_after: int | None = None,
+        current: dict | None = None,
     ) -> None:
         super().__init__(message)
         self.status_code = status_code
@@ -33,6 +34,7 @@ class APIError(Exception):
         self.message = message
         self.fields = fields
         self.retry_after = retry_after
+        self.current = current  # 409 conflict에서 서버에 있는 지금의 노트(F9)
 
     def body(self) -> dict:
         error: dict = {"code": self.code, "message": self.message}
@@ -40,6 +42,8 @@ class APIError(Exception):
             error["fields"] = self.fields
         if self.retry_after is not None:
             error["retry_after"] = self.retry_after
+        if self.current is not None:
+            error["current"] = self.current
         return {"error": error}
 
 
@@ -68,6 +72,8 @@ FIELD_MESSAGES: dict[str, str] = {
     "title": "제목은 1~200자여야 합니다",
     "body": "본문은 50,000자 이내여야 합니다",
     "tags": "태그는 최대 20개, 각 1~30자",
+    # F9 노트 수정 충돌
+    "expected_updated_at": "수정 시각 형식이 올바르지 않습니다",
     # 목록 쿼리(F2부터 쓴다). F4의 kind는 위 F3 문구를 같이 쓴다.
     "open": "open은 true 또는 false여야 합니다",
     "page": "1 이상의 정수여야 합니다",
@@ -90,6 +96,14 @@ NOT_FOUND_MESSAGES: dict[str, str] = {
     "session_id": "기록을 찾을 수 없습니다",
     "note_id": "노트를 찾을 수 없습니다",
 }
+
+
+CONFLICT_MESSAGE = "다른 곳에서 먼저 수정된 노트입니다"
+
+
+def conflict(current: dict) -> APIError:
+    """409 conflict. current는 서버에 있는 지금의 노트(F9)."""
+    return APIError(409, "conflict", CONFLICT_MESSAGE, current=current)
 
 
 def not_found(param: str) -> APIError:

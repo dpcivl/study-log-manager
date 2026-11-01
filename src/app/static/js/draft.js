@@ -82,7 +82,8 @@ function sameValues(a, b) {
 // S4의 초안 보관. 화면 쪽은 값을 읽고 쓰는 방법만 알려 준다.
 // opts: { noteId, subjectId, snapshot(): {kind,title,tags_text,is_open,body}, apply(values): 입력 칸에 값으로 넣는다,
 //         elements: { banner, bannerText, restore, discard, unavailable, form }, leaveLinks: [a, ...] }
-// 돌려주는 값: { start(baseUpdatedAt), flush(), flushForSave(), stop(), markSaved(), hasChanges() }
+// 돌려주는 값: { start(baseUpdatedAt), flush(), flushForSave(), stop(), markSaved(), hasChanges(),
+//               base(), rebase(baseUpdatedAt) }
 export function createDraftSession(opts) {
   const { noteId, snapshot, apply, elements, leaveLinks } = opts;
   const key = () => draftKey(noteId, opts.subjectId());
@@ -178,6 +179,20 @@ export function createDraftSession(opts) {
     removeDraft(key());
   }
 
+  // 저장 때 expected_updated_at으로 보낼 기준값(F9). 복원한 초안이면 초안의 base_updated_at이다.
+  const base = () => baseUpdatedAt;
+
+  // 서버 버전을 불러와 폼을 채웠다(F9). 지금 입력을 새 기준값으로 삼고, 초안과 안내 줄을 지운다.
+  function rebase(newBase) {
+    clearTimeout(timer);
+    timer = null;
+    loadedValues = snapshot();
+    baseUpdatedAt = newBase;
+    touched = false;
+    hideBanner();
+    removeDraft(key());
+  }
+
   elements.restore.addEventListener('click', () => {
     const d = pending;
     if (d === null) return;
@@ -233,5 +248,5 @@ export function createDraftSession(opts) {
     if (document.visibilityState === 'hidden') flush();
   });
 
-  return { start, flush, flushForSave, stop, markSaved, hasChanges };
+  return { start, flush, flushForSave, stop, markSaved, hasChanges, base, rebase };
 }

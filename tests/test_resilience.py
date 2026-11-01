@@ -20,12 +20,21 @@ F10 저장소 장애 처리
   프로세스가 0이 아닌 코드로 끝난다.
 - 로그인: APP_PASSWORD나 SECRET_KEY가 비어 있으면 500 `server_misconfigured`.
 
+F9 수정 충돌 감지
+완료 기준
+- S4를 연 뒤 다른 곳에서 같은 노트를 고치고 저장하면 409가 오고, 입력은 그대로이며 서버 버전의
+  제목·수정 시각과 "내 글로 덮어쓰기" "서버 버전 불러오기" 버튼이 보인다.
+  `expected_updated_at`을 보내지 않은 PATCH는 전처럼 200이다.
+  (패널은 브라우저 JS 동작이라 메인 세션이 확인한다. 여기서는 PATCH 계약만 시험한다.
+   같은 1초 안의 저장은 구분하지 못하므로 sleep 대신 일부러 다른 값을 보낸다.)
+
 해석
 - 본문 최대 길이 50,000자는 그대로이고 50,001자는 전처럼 422(fields.body)다.
 - F10 시작 시험은 모두 subprocess이고 항상 DATABASE_URL을 명시한다. data/study.db는 열지 않는다.
 """
 
 import os
+import re
 import shutil
 import sqlite3
 import stat
@@ -34,6 +43,7 @@ import sys
 import time
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from urllib.parse import quote
 
@@ -1851,3 +1861,758 @@ def test_f8_login_page_is_html_200_when_logged_out(client: TestClient):
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "Study Log" in response.text
+
+
+# ===========================================================================
+# F9: 수정 충돌 감지 (PATCH /api/notes/{id} 의 expected_updated_at)
+# ===========================================================================
+
+F9_CONFLICT_MESSAGE = "다른 곳에서 먼저 수정된 노트입니다"
+F9_FORMAT_MESSAGE = "수정 시각 형식이 올바르지 않습니다"
+F9_OLD = "2000-01-01T00:00:00Z"
+F9_FUTURE = "2999-12-31T23:59:59Z"
+F9_TIME_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def f9_make_note(client: TestClient, **fields) -> dict:
+    sid = make_subject(client, name="충돌 주제")
+    payload = {
+        "kind": "remember",
+        "title": "원래 제목",
+        "body": "원래 본문",
+        "tags": ["pandas", "csv"],
+        "is_open": False,
+    }
+    payload.update(fields)
+    response = client.post(f"/api/subjects/{sid}/notes", json=payload)
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def f9_get(client: TestClient, note_id: int) -> dict:
+    response = client.get(f"/api/notes/{note_id}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def f9_shift(updated_at: str, seconds: int) -> str:
+    moved = datetime.strptime(updated_at, "%Y-%m-%dT%H:%M:%SZ") + timedelta(
+        seconds=seconds
+    )
+    return moved.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def f9_assert_conflict(response, current_expected: dict) -> dict:
+    assert response.status_code == 409, response.text[:300]
+    assert response.headers["content-type"].startswith("application/json")
+    error = response.json()["error"]
+    assert error["code"] == "conflict"
+    assert error["message"] == F9_CONFLICT_MESSAGE
+    assert error["current"] == current_expected
+    assert "fields" not in error
+    assert "retry_after" not in error
+    return error
+
+
+def f9_assert_bad_format(response):
+    assert response.status_code == 422, response.text[:300]
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert error["fields"]["expected_updated_at"] == F9_FORMAT_MESSAGE
+    assert "current" not in error
+
+
+# --- 미전송: 전처럼 동작 ---------------------------------------------------------------
+
+
+def test_f9_patch_without_expected_updated_at_is_200_and_saved(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "고친 제목", "body": "고친 본문"}
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["title"] == "고친 제목"
+    assert data["body"] == "고친 본문"
+    assert "expected_updated_at" not in data
+    assert f9_get(auth_client, note["id"]) == data
+
+
+def test_f9_patch_without_expected_updated_at_ignores_server_side_changes(
+    auth_client: TestClient,
+):
+    """오래된 화면이라도 값을 안 보내면 검사하지 않고 덮어쓴다(F3 그대로)."""
+    note = f9_make_note(auth_client)
+    first = auth_client.patch(f"/api/notes/{note['id']}", json={"title": "다른 곳"})
+    assert first.status_code == 200
+    second = auth_client.patch(f"/api/notes/{note['id']}", json={"title": "나중 것"})
+    assert second.status_code == 200
+    assert f9_get(auth_client, note["id"])["title"] == "나중 것"
+
+
+# --- 일치: 200 -------------------------------------------------------------------------
+
+
+def test_f9_note_updated_at_uses_second_precision_utc_format(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    assert F9_TIME_RE.match(note["updated_at"]), note["updated_at"]
+    assert F9_TIME_RE.match(f9_get(auth_client, note["id"])["updated_at"])
+
+
+def test_f9_matching_expected_updated_at_is_200_and_saved(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    current = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={
+            "title": "일치 후 저장",
+            "body": "일치 후 본문",
+            "expected_updated_at": current["updated_at"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["title"] == "일치 후 저장"
+    assert data["body"] == "일치 후 본문"
+    assert "expected_updated_at" not in data
+    assert f9_get(auth_client, note["id"]) == data
+
+
+def test_f9_matching_expected_updated_at_applies_every_field(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    current = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={
+            "kind": "debug",
+            "title": "전부 고침",
+            "body": "본문도",
+            "tags": ["  Numpy ", "pandas"],
+            "is_open": True,
+            "expected_updated_at": current["updated_at"],
+        },
+    )
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["kind"] == "debug"
+    assert data["title"] == "전부 고침"
+    assert data["body"] == "본문도"
+    assert data["tags"] == ["numpy", "pandas"]
+    assert data["is_open"] is True
+    assert "expected_updated_at" not in data
+
+
+def test_f9_matching_patch_after_post_response_updated_at_is_200(
+    auth_client: TestClient,
+):
+    """POST 응답의 updated_at도 GET과 같은 표기라 그대로 보낼 수 있다."""
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "POST 값으로", "expected_updated_at": note["updated_at"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] == "POST 값으로"
+
+
+def test_f9_post_and_get_responses_have_no_expected_updated_at(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    assert "expected_updated_at" not in note
+    assert "expected_updated_at" not in f9_get(auth_client, note["id"])
+    listing = auth_client.get(f"/api/subjects/{note['subject_id']}/notes")
+    assert listing.status_code == 200
+    for item in listing.json()["items"]:
+        assert "expected_updated_at" not in item
+
+
+def test_f9_expected_updated_at_is_not_stored_on_the_note(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    current = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "저장 안 됨 확인", "expected_updated_at": current["updated_at"]},
+    )
+    assert response.status_code == 200
+    assert set(f9_get(auth_client, note["id"])) == set(current)
+
+
+# --- 불일치: 409 -----------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("stale", [F9_OLD, F9_FUTURE])
+def test_f9_mismatched_expected_updated_at_is_409_with_current(
+    auth_client: TestClient, stale: str
+):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "덮어쓰기 시도", "expected_updated_at": stale},
+    )
+    f9_assert_conflict(response, before)
+
+
+def test_f9_conflict_error_has_only_code_message_and_current(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "x", "expected_updated_at": F9_OLD},
+    )
+    assert response.status_code == 409
+    body = response.json()
+    assert set(body) == {"error"}
+    assert set(body["error"]) == {"code", "message", "current"}
+
+
+@pytest.mark.parametrize("seconds", [-1, 1])
+def test_f9_one_second_off_is_a_mismatch(auth_client: TestClient, seconds: int):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={
+            "title": "1초 차이",
+            "expected_updated_at": f9_shift(before["updated_at"], seconds),
+        },
+    )
+    f9_assert_conflict(response, before)
+    assert f9_get(auth_client, note["id"]) == before
+
+
+def test_f9_conflict_saves_nothing_and_keeps_updated_at(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={
+            "kind": "review",
+            "title": "바뀌면 안 됨",
+            "body": "바뀌면 안 됨",
+            "tags": ["other"],
+            "is_open": True,
+            "expected_updated_at": F9_OLD,
+        },
+    )
+    assert response.status_code == 409
+    after = f9_get(auth_client, note["id"])
+    assert after == before
+    assert after["updated_at"] == before["updated_at"]
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        {"title": "제목만"},
+        {"body": "본문만"},
+        {"tags": ["새태그"]},
+        {"tags": []},
+        {"is_open": True},
+        {"kind": "debug"},
+    ],
+    ids=["title", "body", "tags", "tags-empty", "is_open", "kind"],
+)
+def test_f9_conflict_changes_no_single_field(auth_client: TestClient, change: dict):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={**change, "expected_updated_at": F9_OLD}
+    )
+    assert response.status_code == 409
+    assert f9_get(auth_client, note["id"]) == before
+
+
+def test_f9_conflict_current_shows_the_version_saved_elsewhere(
+    auth_client: TestClient,
+):
+    """다른 곳에서 먼저 고친 상황: 서버 버전의 제목·본문·수정 시각이 current에 담긴다."""
+    note = f9_make_note(auth_client)
+    stale_updated_at = f9_get(auth_client, note["id"])["updated_at"]
+    elsewhere = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "다른 곳에서 고친 제목", "body": "다른 기기에서 고친 본문"},
+    )
+    assert elsewhere.status_code == 200
+    server = f9_get(auth_client, note["id"])
+
+    # 같은 1초 안이면 시각이 같을 수 있으므로, 오래된 화면의 값을 일부러 다르게 둔다.
+    stale = F9_OLD if stale_updated_at == server["updated_at"] else stale_updated_at
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "오래된 화면의 제목", "expected_updated_at": stale},
+    )
+    error = f9_assert_conflict(response, server)
+    assert error["current"]["title"] == "다른 곳에서 고친 제목"
+    assert error["current"]["body"] == "다른 기기에서 고친 본문"
+    assert error["current"]["updated_at"] == server["updated_at"]
+    assert F9_TIME_RE.match(error["current"]["updated_at"])
+    assert f9_get(auth_client, note["id"]) == server
+
+
+def test_f9_conflict_current_has_all_note_fields(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "x", "expected_updated_at": F9_OLD},
+    )
+    current = response.json()["error"]["current"]
+    assert set(current) == {
+        "id",
+        "subject_id",
+        "kind",
+        "title",
+        "body",
+        "tags",
+        "is_open",
+        "created_at",
+        "updated_at",
+    }
+
+
+def test_f9_repeated_conflicts_keep_returning_409(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    for _ in range(3):
+        response = auth_client.patch(
+            f"/api/notes/{note['id']}",
+            json={"title": "반복", "expected_updated_at": F9_OLD},
+        )
+        f9_assert_conflict(response, before)
+
+
+def test_f9_conflict_on_one_note_does_not_touch_other_notes(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    other = auth_client.post(
+        f"/api/subjects/{note['subject_id']}/notes",
+        json={"kind": "debug", "title": "다른 노트"},
+    ).json()
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "x", "expected_updated_at": F9_OLD},
+    )
+    assert response.status_code == 409
+    assert f9_get(auth_client, other["id"]) == other
+
+
+# --- 덮어쓰기 흐름 ------------------------------------------------------------------------
+
+
+def test_f9_overwrite_flow_resend_with_current_updated_at_is_200(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    first = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "내 글", "body": "내 본문", "expected_updated_at": F9_OLD},
+    )
+    assert first.status_code == 409
+    server_updated_at = first.json()["error"]["current"]["updated_at"]
+
+    second = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={
+            "title": "내 글",
+            "body": "내 본문",
+            "expected_updated_at": server_updated_at,
+        },
+    )
+    assert second.status_code == 200, second.text
+    data = second.json()
+    assert data["title"] == "내 글"
+    assert data["body"] == "내 본문"
+    assert "expected_updated_at" not in data
+    assert f9_get(auth_client, note["id"]) == data
+
+
+def test_f9_overwrite_flow_after_other_device_edit(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    other_device = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "다른 기기", "body": "다른 본문"}
+    )
+    assert other_device.status_code == 200
+
+    conflict = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "내 글", "expected_updated_at": F9_OLD},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["error"]["current"]["title"] == "다른 기기"
+
+    overwrite = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={
+            "title": "내 글",
+            "expected_updated_at": conflict.json()["error"]["current"]["updated_at"],
+        },
+    )
+    assert overwrite.status_code == 200
+    saved = f9_get(auth_client, note["id"])
+    assert saved["title"] == "내 글"
+    assert saved["body"] == "다른 본문"
+
+
+def test_f9_after_overwrite_the_old_updated_at_conflicts_again(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    stale = f9_get(auth_client, note["id"])["updated_at"]
+    fresh = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "저장됨", "expected_updated_at": stale}
+    )
+    assert fresh.status_code == 200
+    saved = f9_get(auth_client, note["id"])
+    # 이전 값이 서버의 값과 같은 1초라면 구분할 수 없으므로 다른 값으로 확인한다.
+    old = F9_OLD if stale == saved["updated_at"] else stale
+    again = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "또", "expected_updated_at": old}
+    )
+    f9_assert_conflict(again, saved)
+
+
+# --- expected_updated_at 만 보냄 -----------------------------------------------------------
+
+
+def test_f9_only_expected_updated_at_matching_is_200_and_changes_nothing(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"expected_updated_at": before["updated_at"]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json() == before
+    assert "expected_updated_at" not in response.json()
+    after = f9_get(auth_client, note["id"])
+    assert after == before
+    assert after["updated_at"] == before["updated_at"]
+
+
+@pytest.mark.parametrize("stale", [F9_OLD, F9_FUTURE])
+def test_f9_only_expected_updated_at_mismatched_is_409(
+    auth_client: TestClient, stale: str
+):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"expected_updated_at": stale}
+    )
+    f9_assert_conflict(response, before)
+    assert f9_get(auth_client, note["id"]) == before
+
+
+# --- 형식 오류: 422 -------------------------------------------------------------------------
+
+F9_BAD_VALUES = [
+    pytest.param(None, id="null"),
+    pytest.param(1730373600, id="number-int"),
+    pytest.param(1.5, id="number-float"),
+    pytest.param(True, id="bool-true"),
+    pytest.param(False, id="bool-false"),
+    pytest.param(["2026-10-31T11:20:00Z"], id="array"),
+    pytest.param([], id="array-empty"),
+    pytest.param({"updated_at": "2026-10-31T11:20:00Z"}, id="object"),
+    pytest.param({}, id="object-empty"),
+    pytest.param("", id="empty-string"),
+    pytest.param("2026-10-31", id="date-only"),
+    pytest.param("2026-10-31T11:20:00", id="no-z"),
+    pytest.param("2026-10-31T11:20:00.000Z", id="fraction"),
+    pytest.param("2026-10-31T11:20:00.5Z", id="fraction-1digit"),
+    pytest.param(" 2026-10-31T11:20:00Z", id="leading-space"),
+    pytest.param("2026-10-31T11:20:00Z ", id="trailing-space"),
+    pytest.param("2026-10-31T11:20:00Z\n", id="trailing-newline"),
+    pytest.param("2026-10-31T11:20:00+09:00", id="offset"),
+    pytest.param("2026-10-31T11:20:00+00:00", id="offset-zero"),
+    pytest.param("2026-10-31T11:20:00z", id="lowercase-z"),
+    pytest.param("2026-10-31t11:20:00Z", id="lowercase-t"),
+    pytest.param("2026-10-31 11:20:00Z", id="space-instead-of-t"),
+    pytest.param("2026-13-45T00:00:00Z", id="month-13-day-45"),
+    pytest.param("2026-02-30T00:00:00Z", id="feb-30"),
+    pytest.param("2026-10-31T25:00:00Z", id="hour-25"),
+    pytest.param("2026-10-31T11:60:00Z", id="minute-60"),
+    pytest.param("2026-10-31T11:20:61Z", id="second-61"),
+    pytest.param("２０２６-10-31T11:20:00Z", id="fullwidth-digits"),
+    pytest.param("2026-10-31T１１:20:00Z", id="fullwidth-hour"),
+    pytest.param("not-a-date", id="garbage"),
+]
+
+
+@pytest.mark.parametrize("bad", F9_BAD_VALUES)
+def test_f9_malformed_expected_updated_at_is_422(auth_client: TestClient, bad):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "형식 오류", "expected_updated_at": bad}
+    )
+    f9_assert_bad_format(response)
+    assert f9_get(auth_client, note["id"]) == before
+
+
+@pytest.mark.parametrize("bad", F9_BAD_VALUES)
+def test_f9_malformed_expected_updated_at_alone_is_422(auth_client: TestClient, bad):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"expected_updated_at": bad}
+    )
+    f9_assert_bad_format(response)
+    assert f9_get(auth_client, note["id"]) == before
+
+
+@pytest.mark.parametrize(
+    "variant",
+    [
+        lambda t: t[:-1],
+        lambda t: t[:-1] + ".000Z",
+        lambda t: t[:-1] + "+09:00",
+        lambda t: t[:-1] + "z",
+        lambda t: " " + t,
+        lambda t: t + " ",
+        lambda t: t[:10],
+    ],
+    ids=["no-z", "fraction", "offset", "lowercase-z", "leading", "trailing", "date-only"],
+)
+def test_f9_real_updated_at_with_altered_notation_is_422_not_409(
+    auth_client: TestClient, variant
+):
+    """실제 값에서 표기만 바꿔도 같은 시각으로 쳐 주지 않고 형식 오류로 막는다."""
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "표기 변경", "expected_updated_at": variant(before["updated_at"])},
+    )
+    f9_assert_bad_format(response)
+    assert f9_get(auth_client, note["id"]) == before
+
+
+def test_f9_malformed_422_has_only_the_expected_updated_at_field(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "ok", "expected_updated_at": "bad"}
+    )
+    assert response.status_code == 422
+    assert list(response.json()["error"]["fields"]) == ["expected_updated_at"]
+
+
+# --- 검사 순서: 입력값(422) -> 없는 노트(404) -> 충돌(409) -----------------------------------
+
+
+def test_f9_malformed_value_on_missing_note_is_422(auth_client: TestClient):
+    response = auth_client.patch(
+        "/api/notes/999999", json={"title": "x", "expected_updated_at": "bad"}
+    )
+    f9_assert_bad_format(response)
+
+
+def test_f9_malformed_value_alone_on_missing_note_is_422(auth_client: TestClient):
+    response = auth_client.patch(
+        "/api/notes/999999", json={"expected_updated_at": "2026-10-31"}
+    )
+    f9_assert_bad_format(response)
+
+
+def test_f9_invalid_title_with_mismatch_is_422_not_409(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "", "expected_updated_at": F9_OLD}
+    )
+    assert response.status_code == 422, response.text[:300]
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert "title" in error["fields"]
+    assert "expected_updated_at" not in error["fields"]
+    assert "current" not in error
+    assert f9_get(auth_client, note["id"]) == before
+
+
+def test_f9_invalid_title_and_malformed_value_report_both_fields(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}", json={"title": "", "expected_updated_at": "bad"}
+    )
+    assert response.status_code == 422
+    fields = response.json()["error"]["fields"]
+    assert "title" in fields
+    assert fields["expected_updated_at"] == F9_FORMAT_MESSAGE
+
+
+def test_f9_missing_note_with_mismatch_is_404_not_409(auth_client: TestClient):
+    response = auth_client.patch(
+        "/api/notes/999999", json={"title": "x", "expected_updated_at": F9_OLD}
+    )
+    assert response.status_code == 404, response.text[:300]
+    error = response.json()["error"]
+    assert error["code"] == "not_found"
+    assert error["message"] == "노트를 찾을 수 없습니다"
+    assert "current" not in error
+
+
+def test_f9_missing_note_without_expected_updated_at_is_still_404(
+    auth_client: TestClient,
+):
+    response = auth_client.patch("/api/notes/999999", json={"title": "x"})
+    assert response.status_code == 404
+    assert response.json()["error"]["code"] == "not_found"
+
+
+def test_f9_deleted_note_with_expected_updated_at_is_404(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    assert auth_client.delete(f"/api/notes/{note['id']}").status_code == 204
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        json={"title": "x", "expected_updated_at": note["updated_at"]},
+    )
+    assert response.status_code == 404
+    assert "current" not in response.json()["error"]
+
+
+# --- 미로그인: 어떤 경우든 401, current 없음 ------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"title": "x", "expected_updated_at": F9_OLD},
+        {"expected_updated_at": F9_OLD},
+        {"title": "x", "expected_updated_at": "bad"},
+        {"title": "", "expected_updated_at": F9_OLD},
+        {"title": "x"},
+    ],
+    ids=["mismatch", "mismatch-only", "malformed", "invalid-title", "no-expected"],
+)
+def test_f9_logged_out_patch_is_401_without_current(
+    auth_client: TestClient, payload: dict
+):
+    note = f9_make_note(auth_client)
+    before = f9_get(auth_client, note["id"])
+    auth_client.cookies.clear()
+    response = auth_client.patch(f"/api/notes/{note['id']}", json=payload)
+    assert response.status_code == 401, response.text[:300]
+    error = response.json()["error"]
+    assert error["code"] == "unauthorized"
+    assert error["message"] == "로그인이 필요합니다"
+    assert "current" not in error
+    assert "fields" not in error
+
+    login = auth_client.post("/api/login", json={"password": TEST_PASSWORD})
+    assert login.status_code == 204
+    assert f9_get(auth_client, note["id"]) == before
+
+
+def test_f9_logged_out_patch_on_missing_note_is_401(client: TestClient):
+    response = client.patch(
+        "/api/notes/999999", json={"title": "x", "expected_updated_at": F9_OLD}
+    )
+    assert response.status_code == 401
+    assert "current" not in response.json()["error"]
+
+
+# --- 다른 API는 영향이 없다 -----------------------------------------------------------------
+
+
+def test_f9_subject_patch_is_not_affected_by_expected_updated_at(
+    auth_client: TestClient,
+):
+    baseline_id = make_subject(auth_client, name="기준 주제")
+    other_id = make_subject(auth_client, name="비교 주제")
+    baseline = auth_client.patch(f"/api/subjects/{baseline_id}", json={"name": "새 이름"})
+    response = auth_client.patch(
+        f"/api/subjects/{other_id}",
+        json={"name": "새 이름", "expected_updated_at": F9_OLD},
+    )
+    assert response.status_code == baseline.status_code
+    assert response.status_code != 409
+    assert "expected_updated_at" not in response.json().get("error", {}).get(
+        "fields", {}
+    )
+    if response.status_code == 200:
+        assert response.json()["name"] == "새 이름"
+        assert "expected_updated_at" not in response.json()
+
+
+def test_f9_subject_patch_does_not_validate_expected_updated_at_format(
+    auth_client: TestClient,
+):
+    sid = make_subject(auth_client, name="형식 무관")
+    response = auth_client.patch(
+        f"/api/subjects/{sid}", json={"name": "그대로", "expected_updated_at": "bad"}
+    )
+    assert response.status_code != 409
+    assert "expected_updated_at" not in response.json().get("error", {}).get(
+        "fields", {}
+    )
+
+
+def test_f9_session_patch_is_not_affected_by_expected_updated_at(
+    auth_client: TestClient,
+):
+    sid = make_subject(auth_client, name="공부 기록 주제")
+    created = auth_client.post(
+        f"/api/subjects/{sid}/sessions",
+        json={"studied_on": "2026-10-30", "minutes": 30, "memo": "처음"},
+    )
+    assert created.status_code == 201, created.text
+    sess_id = created.json()["id"]
+    baseline_created = auth_client.post(
+        f"/api/subjects/{sid}/sessions",
+        json={"studied_on": "2026-10-30", "minutes": 30, "memo": "처음"},
+    )
+    baseline = auth_client.patch(
+        f"/api/sessions/{baseline_created.json()['id']}", json={"minutes": 45}
+    )
+    response = auth_client.patch(
+        f"/api/sessions/{sess_id}",
+        json={"minutes": 45, "expected_updated_at": F9_OLD},
+    )
+    assert response.status_code == baseline.status_code
+    assert response.status_code != 409
+    assert "expected_updated_at" not in response.json().get("error", {}).get(
+        "fields", {}
+    )
+    if response.status_code == 200:
+        assert response.json()["minutes"] == 45
+        assert "expected_updated_at" not in response.json()
+
+
+def test_f9_post_note_with_expected_updated_at_does_not_store_it(
+    auth_client: TestClient,
+):
+    sid = make_subject(auth_client, name="POST 무관")
+    response = auth_client.post(
+        f"/api/subjects/{sid}/notes",
+        json={"kind": "remember", "title": "새 노트", "expected_updated_at": F9_OLD},
+    )
+    assert response.status_code != 409
+    if response.status_code == 201:
+        assert "expected_updated_at" not in response.json()
+
+
+def test_f9_note_delete_and_get_do_not_use_expected_updated_at(
+    auth_client: TestClient,
+):
+    note = f9_make_note(auth_client)
+    got = auth_client.get(f"/api/notes/{note['id']}?expected_updated_at={F9_OLD}")
+    assert got.status_code == 200
+    assert auth_client.delete(f"/api/notes/{note['id']}").status_code == 204
+
+
+def test_f9_unsupported_media_type_is_still_415(auth_client: TestClient):
+    note = f9_make_note(auth_client)
+    response = auth_client.patch(
+        f"/api/notes/{note['id']}",
+        content=f'{{"expected_updated_at": "{F9_OLD}"}}',
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 415
+    assert response.json()["error"]["code"] == "unsupported_media_type"

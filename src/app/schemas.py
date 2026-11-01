@@ -225,19 +225,41 @@ class NoteCreate(BaseModel):
     _check_tags = field_validator("tags")(_clean_tags)
 
 
+_ISO_UTC_SECONDS = re.compile(r"([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z")
+
+
+def _utc_seconds_only(value: object) -> object:
+    """expected_updated_at은 ASCII "YYYY-MM-DDTHH:MM:SSZ" 문자열만 받는다(응답의 표기와 같다).
+
+    달력에 없는 날짜나 시각(2026-02-30, 25시, 0000년)도 거부한다. 문구는 errors의 FIELD_MESSAGES.
+    """
+    if isinstance(value, str) and (match := _ISO_UTC_SECONDS.fullmatch(value)):
+        try:
+            datetime(*map(int, match.groups()))
+        except ValueError:
+            pass
+        else:
+            return value
+    raise ValueError("수정 시각 형식이 올바르지 않습니다")
+
+
 class NoteUpdate(BaseModel):
-    # 보낸 필드만 수정한다(exclude_unset). 다섯 필드 모두 null을 허용하지 않아 기본값을 None으로
+    # 보낸 필드만 수정한다(exclude_unset). 다섯 저장 필드는 null을 허용하지 않아 기본값을 None으로
     # 두되 타입은 non-null로 선언한다(null을 보내면 422, 생략하면 변경 없음).
     kind: NoteKind = Field(default=None)
     title: str = Field(default=None, min_length=1, max_length=200)
     body: str = Field(default=None, max_length=50000)
     tags: list[str] = Field(default=None)
     is_open: bool = Field(default=None, strict=True)
+    # F9: 저장 필드가 아니다. 보내면 저장된 updated_at과 비교만 한다. exclude=True라 model_dump에
+    # 나오지 않는다.
+    expected_updated_at: str = Field(default=None, exclude=True)
 
     _check_title = field_validator("title")(_title_not_blank)
     _check_title_line = field_validator("title")(_single_line)
     _check_body = field_validator("body")(_multi_line)
     _check_tags = field_validator("tags")(_clean_tags)
+    _check_expected = field_validator("expected_updated_at", mode="before")(_utc_seconds_only)
 
 
 class NoteOut(_OutModel):

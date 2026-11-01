@@ -111,6 +111,13 @@ export function dateKst(iso) {
   return new Date(Date.parse(iso) + 9 * 3600 * 1000).toISOString().slice(0, 10);
 }
 
+// ISO 8601 UTC 시각 → KST "YYYY-MM-DD HH:MM". 해석할 수 없으면 빈 문자열이다.
+export function dateTimeKst(iso) {
+  const ms = Date.parse(iso);
+  if (!Number.isFinite(ms)) return '';
+  return new Date(ms + 9 * 3600 * 1000).toISOString().slice(0, 16).replace('T', ' ');
+}
+
 // 분 → "1.5h" (소수 첫째 자리까지, 0.0이면 "0h")
 export function formatHours(minutes) {
   return String(Math.round(minutes / 6) / 10) + 'h';
