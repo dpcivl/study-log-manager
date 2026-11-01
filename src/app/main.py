@@ -6,7 +6,7 @@ from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -24,6 +24,7 @@ from app.errors import (
     validation_fields,
 )
 from app.routers import auth, export, notes, pages, sessions, subjects
+from app.routers.pages import templates
 from app.security_headers import SecurityHeadersMiddleware, security_headers
 from app.settings import (
     MIN_APP_PASSWORD_LENGTH,
@@ -36,6 +37,22 @@ from app.startup import StartupError, load_settings, open_storage
 logger = logging.getLogger(__name__)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
+
+
+def wants_error_page(request: Request) -> bool:
+    """오류를 S6 HTML로 돌려줄 요청인가(F11). /api/, /static/ 아래와 GET이 아닌 요청은 JSON이다."""
+    path = request.scope["path"]
+    return request.method == "GET" and not path.startswith(("/api/", "/static/"))
+
+
+def error_page(status: int, headers: dict[str, str] | None = None) -> Response | None:
+    """S6 오류 화면. 경로나 예외 내용은 넣지 않는다. 그리지 못하면 None(호출한 쪽이 JSON을 쓴다)."""
+    try:
+        html = templates.get_template("error.html").render(status=status)
+    except Exception:
+        logger.error("오류 화면(S6)을 그리지 못했습니다", exc_info=True)
+        return None
+    return HTMLResponse(html, status_code=status, headers=headers)
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -161,7 +178,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(RequestValidationError)
     async def validation_error_handler(
         request: Request, exc: RequestValidationError
-    ) -> JSONResponse:
+    ) -> Response:
         errors = exc.errors()
         unauthorized = unauthorized_before_body(request)
         if unauthorized is not None:
@@ -170,16 +187,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         for err in errors:
             loc = err.get("loc", ())
             if loc and loc[0] == "path" and loc[-1] in NOT_FOUND_MESSAGES:
+                if wants_error_page(request) and (page := error_page(404)) is not None:
+                    return page
                 return error_response(404, "not_found", NOT_FOUND_MESSAGES[loc[-1]])
         return error_response(
             422, "validation_error", "입력값을 확인하세요", fields=validation_fields(errors)
         )
 
     @app.exception_handler(StarletteHTTPException)
-    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+    async def http_error_handler(request: Request, exc: StarletteHTTPException) -> Response:
         # 405의 Allow 같은 헤더는 예외가 가져온 그대로 내보낸다.
         headers = exc.headers
         if exc.status_code == 404:
+            if wants_error_page(request) and (page := error_page(404)) is not None:
+                return page
             return error_response(404, "not_found", "찾을 수 없습니다", headers=headers)
         if exc.status_code == 415:
             return error_response(
@@ -204,16 +225,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return error_response(exc.status_code, "http_error", str(exc.detail), headers=headers)
 
     @app.exception_handler(Exception)
-    async def unhandled_error_handler(request: Request, exc: Exception) -> JSONResponse:
+    async def unhandled_error_handler(request: Request, exc: Exception) -> Response:
         # 내부 정보는 응답에 넣지 않고 서버 로그에만 남긴다.
         path = request.scope["path"]
         logger.error("처리되지 않은 예외: %s %r", request.method, path, exc_info=exc)
         # 500 응답은 가장 바깥 미들웨어를 거치지 않으므로 보안 헤더를 직접 붙인다.
+        headers = security_headers(path, settings.public_deploy)
+        if wants_error_page(request) and (page := error_page(500, headers)) is not None:
+            return page
         return error_response(
-            500,
-            "internal_error",
-            "서버 오류가 발생했습니다",
-            headers=security_headers(path, settings.public_deploy),
+            500, "internal_error", "서버 오류가 발생했습니다", headers=headers
         )
 
     return app

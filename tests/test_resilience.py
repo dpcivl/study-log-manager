@@ -1214,3 +1214,333 @@ def test_f10_seed_script_fails_when_database_url_query_value_is_wrong(tmp_path: 
     assert START_PASSWORD not in output
     assert START_SECRET not in output
     assert not db.exists()
+
+
+# ===========================================================================
+# F11: 화면 공통 오류 처리 (S6 오류 화면)
+#
+# 브라우저 동작(15초 시간 제한, 비JSON 응답, 로그아웃 실패, 로그인 잠금 문구, 요약 실패)은
+# 메인 세션이 실제 브라우저로 확인한다. 여기서는 S6의 상태 코드와 내용만 확인한다.
+# ===========================================================================
+
+F11_NOT_FOUND_TITLE = "페이지를 찾을 수 없습니다"
+F11_NOT_FOUND_HINT = "주소를 확인해 주세요"
+F11_ERROR_TITLE = "일시적인 문제가 발생했습니다"
+F11_ERROR_HINT = "잠시 후 다시 시도해 주세요"
+F11_HOME_LINK_TEXT = "주제 목록으로"
+F11_APP_NAME = "Study Log"
+F11_BOOM_MESSAGE = "f11-secret-boom-message-7731"
+F11_BOOM_PATH = "/f11-boom-page-zq"
+F11_API_BOOM_PATH = "/api/f11-boom-zq"
+
+F11_LOGIN_REQUIRED_BAD_PATHS = [
+    "/subjects/abc",
+    "/notes/abc",
+    "/notes/abc/edit",
+    "/subjects/abc/notes/new",
+]
+F11_UNKNOWN_PATHS = ["/없는주소", "/f11-unknown-path-zq", "/subjects", "/notes"]
+
+
+def assert_f11_s6(response, status: int) -> None:
+    """S6 오류 화면의 공통 모양: 상태 코드, HTML, 문구, 홈 링크, 보안 헤더, 스크립트 없음."""
+    assert response.status_code == status, response.text[:300]
+    assert response.headers["content-type"].startswith("text/html"), response.headers
+    text = response.text
+    assert F11_APP_NAME in text
+    assert F11_HOME_LINK_TEXT in text
+    assert 'href="/"' in text
+    if status == 404:
+        assert F11_NOT_FOUND_TITLE in text
+        assert F11_NOT_FOUND_HINT in text
+        assert F11_ERROR_TITLE not in text
+    else:
+        assert F11_ERROR_TITLE in text
+        assert F11_ERROR_HINT in text
+        assert F11_NOT_FOUND_TITLE not in text
+    # JSON 원문이 아니다.
+    assert not text.lstrip().startswith("{")
+    assert '"error"' not in text
+    assert '"code"' not in text
+    # 스크립트 없이 동작한다.
+    assert "<script" not in text.lower()
+    # 보안 헤더
+    assert response.headers.get("content-security-policy"), response.headers
+    assert response.headers.get("x-content-type-options") == "nosniff"
+
+
+def assert_f11_json_error(response, *, code: str | None = None) -> None:
+    assert response.headers["content-type"].startswith("application/json"), (
+        response.status_code,
+        response.headers,
+        response.text[:200],
+    )
+    body = response.json()
+    assert "error" in body, body
+    assert "code" in body["error"], body
+    if code is not None:
+        assert body["error"]["code"] == code, body
+
+
+@pytest.fixture
+def f11_boom_client(tmp_path: Path):
+    """처리되지 않은 예외를 던지는 GET 라우트를 더한 로그인 상태의 클라이언트."""
+    app = create_app(make_settings(database_url="sqlite:///" + str(tmp_path / "x.db")))
+
+    @app.get(F11_BOOM_PATH)
+    def boom_page():
+        raise RuntimeError(F11_BOOM_MESSAGE)
+
+    @app.get(F11_API_BOOM_PATH)
+    def boom_api():
+        raise RuntimeError(F11_BOOM_MESSAGE)
+
+    with TestClient(app, raise_server_exceptions=False) as c:
+        login = c.post("/api/login", json={"password": TEST_PASSWORD})
+        assert login.status_code == 204, login.text
+        yield c
+
+
+# --- 404: 로그인한 상태 ---------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", F11_LOGIN_REQUIRED_BAD_PATHS, ids=lambda p: p)
+def test_f11_logged_in_bad_id_on_screen_path_is_404_s6(auth_client: TestClient, path: str):
+    response = auth_client.get(path, follow_redirects=False)
+    assert_f11_s6(response, 404)
+
+
+@pytest.mark.parametrize("path", F11_UNKNOWN_PATHS, ids=lambda p: p)
+def test_f11_logged_in_unknown_path_is_404_s6(auth_client: TestClient, path: str):
+    response = auth_client.get(path, follow_redirects=False)
+    assert_f11_s6(response, 404)
+
+
+def test_f11_s6_404_body_does_not_echo_the_requested_path(auth_client: TestClient):
+    for path in ("/없는주소", "/f11-unknown-path-zq"):
+        response = auth_client.get(path)
+        assert_f11_s6(response, 404)
+        assert path.lstrip("/") not in response.text
+    # 잘못된 id 값도 본문에 되돌려 주지 않는다.
+    response = auth_client.get("/subjects/f11zqid")
+    assert_f11_s6(response, 404)
+    assert "f11zqid" not in response.text
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/subjects/-1", "/subjects/1.5", "/subjects/1/notes/new/extra", "/notes/1/delete"],
+    ids=lambda p: p,
+)
+def test_f11_logged_in_malformed_screen_paths_are_404_s6(auth_client: TestClient, path: str):
+    response = auth_client.get(path, follow_redirects=False)
+    assert_f11_s6(response, 404)
+
+
+# --- 404: 미로그인 ---------------------------------------------------------------
+
+
+@pytest.mark.parametrize("path", F11_UNKNOWN_PATHS, ids=lambda p: p)
+def test_f11_logged_out_unknown_path_is_404_s6(client: TestClient, path: str):
+    response = client.get(path, follow_redirects=False)
+    assert_f11_s6(response, 404)
+
+
+@pytest.mark.parametrize("path", F11_LOGIN_REQUIRED_BAD_PATHS, ids=lambda p: p)
+def test_f11_logged_out_login_required_screen_redirects_to_login(
+    client: TestClient, path: str
+):
+    response = client.get(path, follow_redirects=False)
+    assert response.status_code == 302, response.text[:300]
+    assert response.headers["location"].startswith("/login")
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/", "/subjects/1", "/subjects/99999", "/subjects/1/notes/new", "/notes/1", "/notes/1/edit"],
+    ids=lambda p: p,
+)
+def test_f11_logged_out_valid_screen_paths_still_redirect_to_login(
+    client: TestClient, path: str
+):
+    response = client.get(path, follow_redirects=False)
+    assert response.status_code == 302, response.text[:300]
+    assert response.headers["location"].startswith("/login")
+
+
+def test_f11_login_page_still_shown_when_logged_out(client: TestClient):
+    response = client.get("/login")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/html")
+    assert F11_NOT_FOUND_TITLE not in response.text
+
+
+# --- 숫자 id인데 자원이 없는 화면은 200 그대로 ------------------------------------
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["/subjects/99999", "/notes/99999", "/notes/99999/edit", "/subjects/99999/notes/new"],
+    ids=lambda p: p,
+)
+def test_f11_logged_in_numeric_id_without_resource_is_200_html_as_before(
+    auth_client: TestClient, path: str
+):
+    response = auth_client.get(path, follow_redirects=False)
+    assert response.status_code == 200, response.text[:300]
+    assert response.headers["content-type"].startswith("text/html")
+    assert F11_NOT_FOUND_TITLE not in response.text
+    assert F11_NOT_FOUND_HINT not in response.text
+
+
+def test_f11_existing_screens_are_200_html_when_logged_in(auth_client: TestClient):
+    sid = make_subject(auth_client, "S6 회귀 주제")
+    note = post_note(auth_client, sid, "본문").json()
+    for path in (
+        "/",
+        f"/subjects/{sid}",
+        f"/subjects/{sid}/notes/new",
+        f"/notes/{note['id']}",
+        f"/notes/{note['id']}/edit",
+    ):
+        response = auth_client.get(path, follow_redirects=False)
+        assert response.status_code == 200, path
+        assert response.headers["content-type"].startswith("text/html"), path
+        assert F11_NOT_FOUND_TITLE not in response.text, path
+
+
+# --- /api/, /static/, GET이 아닌 요청은 JSON 그대로 ---------------------------------
+
+
+def test_f11_unknown_api_path_stays_json_not_found_when_logged_in(auth_client: TestClient):
+    for path in ("/api/없는주소", "/api/f11-unknown-zq", "/api/subjects/abc/nothing"):
+        response = auth_client.get(path)
+        assert response.status_code == 404, path
+        assert_f11_json_error(response, code="not_found")
+        assert F11_NOT_FOUND_TITLE not in response.text
+
+
+def test_f11_unknown_static_path_stays_json_not_found(auth_client: TestClient):
+    for path in ("/static/없는파일", "/static/f11-missing-zq.js"):
+        response = auth_client.get(path)
+        assert response.status_code == 404, path
+        assert_f11_json_error(response, code="not_found")
+        assert F11_NOT_FOUND_TITLE not in response.text
+
+
+def test_f11_unknown_static_path_stays_json_when_logged_out(client: TestClient):
+    response = client.get("/static/없는파일")
+    assert response.status_code == 404
+    assert_f11_json_error(response, code="not_found")
+
+
+def test_f11_non_get_requests_to_unknown_or_screen_paths_stay_json(auth_client: TestClient):
+    responses = [
+        auth_client.post("/없는주소", json={}),
+        auth_client.post("/", json={}),
+        auth_client.post("/subjects/abc", json={}),
+        auth_client.delete("/없는주소"),
+        auth_client.patch("/없는주소", json={}),
+    ]
+    for response in responses:
+        assert response.status_code in (404, 405), response.status_code
+        assert_f11_json_error(response)
+        assert F11_NOT_FOUND_TITLE not in response.text
+        assert F11_HOME_LINK_TEXT not in response.text
+
+
+def test_f11_non_get_unknown_path_is_json_not_found(auth_client: TestClient):
+    response = auth_client.post("/없는주소", json={})
+    assert response.status_code == 404
+    assert_f11_json_error(response, code="not_found")
+
+
+def test_f11_api_errors_keep_their_json_shape(auth_client: TestClient):
+    missing = auth_client.get("/api/subjects/99999")
+    assert missing.status_code == 404
+    assert_f11_json_error(missing, code="not_found")
+    invalid = auth_client.post("/api/subjects", json={"name": ""})
+    assert invalid.status_code == 422
+    assert_f11_json_error(invalid, code="validation_error")
+
+
+def test_f11_api_unauthorized_stays_401_json_when_logged_out(client: TestClient):
+    response = client.get("/api/subjects")
+    assert response.status_code == 401
+    assert_f11_json_error(response, code="unauthorized")
+
+
+# --- 처리되지 않은 예외 -----------------------------------------------------------
+
+
+def test_f11_unhandled_exception_on_html_path_is_500_s6(f11_boom_client: TestClient):
+    response = f11_boom_client.get(F11_BOOM_PATH)
+    assert_f11_s6(response, 500)
+
+
+def test_f11_500_s6_hides_exception_message_and_path(f11_boom_client: TestClient):
+    response = f11_boom_client.get(F11_BOOM_PATH)
+    assert_f11_s6(response, 500)
+    text = response.text
+    assert F11_BOOM_MESSAGE not in text
+    assert "RuntimeError" not in text
+    assert F11_BOOM_PATH.lstrip("/") not in text
+    assert "traceback" not in text.lower()
+    assert ".py" not in text
+    assert "File \"" not in text
+
+
+def test_f11_500_s6_is_returned_even_when_logged_out(tmp_path: Path):
+    app = create_app(make_settings(database_url="sqlite:///" + str(tmp_path / "x.db")))
+
+    @app.get(F11_BOOM_PATH)
+    def boom_page():
+        raise RuntimeError(F11_BOOM_MESSAGE)
+
+    with TestClient(app, raise_server_exceptions=False) as anonymous:
+        response = anonymous.get(F11_BOOM_PATH)
+    assert_f11_s6(response, 500)
+    assert F11_BOOM_MESSAGE not in response.text
+
+
+def test_f11_unhandled_exception_on_api_path_stays_500_json_internal_error(
+    f11_boom_client: TestClient,
+):
+    response = f11_boom_client.get(F11_API_BOOM_PATH)
+    assert response.status_code == 500
+    assert_f11_json_error(response, code="internal_error")
+    assert F11_BOOM_MESSAGE not in response.text
+    assert F11_ERROR_TITLE not in response.text
+
+
+def test_f11_app_keeps_serving_after_a_500(f11_boom_client: TestClient):
+    assert f11_boom_client.get(F11_BOOM_PATH).status_code == 500
+    assert f11_boom_client.get("/").status_code == 200
+    assert f11_boom_client.get("/api/subjects").status_code == 200
+
+
+# --- S6 공통 모양(404와 500 모두) --------------------------------------------------
+
+
+def test_f11_s6_has_security_headers_and_no_script_for_404_and_500(
+    f11_boom_client: TestClient,
+):
+    not_found = f11_boom_client.get("/f11-unknown-path-zq")
+    server_error = f11_boom_client.get(F11_BOOM_PATH)
+    for response, status in ((not_found, 404), (server_error, 500)):
+        assert response.status_code == status
+        assert response.headers.get("content-security-policy")
+        assert response.headers.get("x-content-type-options") == "nosniff"
+        assert "<script" not in response.text.lower()
+        assert response.headers["content-type"].startswith("text/html")
+
+
+def test_f11_s6_404_and_500_differ_only_in_wording(f11_boom_client: TestClient):
+    not_found = f11_boom_client.get("/f11-unknown-path-zq")
+    server_error = f11_boom_client.get(F11_BOOM_PATH)
+    assert F11_NOT_FOUND_TITLE in not_found.text and F11_NOT_FOUND_TITLE not in server_error.text
+    assert F11_ERROR_TITLE in server_error.text and F11_ERROR_TITLE not in not_found.text
+    for response in (not_found, server_error):
+        assert F11_APP_NAME in response.text
+        assert 'href="/"' in response.text
+        assert F11_HOME_LINK_TEXT in response.text

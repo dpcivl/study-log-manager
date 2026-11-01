@@ -79,9 +79,25 @@ form.addEventListener('submit', async (event) => {
   render();
 });
 
-document.getElementById('logout-btn').addEventListener('click', async () => {
-  await api('POST', '/api/logout');
-  location.href = '/login';
+// 로그아웃(F11). 성공하면 S1로, 실패하면 S2에 머물며 문구를 보인다. 입력 중인 내용은 그대로 둔다.
+const logoutBtn = document.getElementById('logout-btn');
+const logoutError = document.getElementById('logout-error');
+logoutBtn.addEventListener('click', async () => {
+  if (logoutBtn.disabled) return;
+  logoutBtn.disabled = true;
+  logoutError.hidden = true; // 다시 누르면 지난 문구를 지운다
+  const res = await api('POST', '/api/logout');
+  if (res.ok) {
+    location.href = '/login'; // 이동이 끝날 때까지 버튼을 꺼 둔다
+    return;
+  }
+  logoutBtn.disabled = false;
+  logoutError.hidden = false;
+});
+
+// 이동한 뒤 뒤로 가기로 bfcache에서 복원되면 스크립트가 다시 돌지 않으므로 여기서 버튼을 다시 켠다.
+window.addEventListener('pageshow', (event) => {
+  if (event.persisted) logoutBtn.disabled = false;
 });
 
 load();

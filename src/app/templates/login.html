@@ -11,11 +11,12 @@
         <label for="login-password">비밀번호</label>
         <input id="login-password" class="input" type="password" name="password" autocomplete="current-password" autofocus>
       </div>
-      <button class="btn btn-primary" type="submit">로그인</button>
+      <button id="login-submit" class="btn btn-primary" type="submit">로그인</button>
+      <!-- F11 -->
       <div id="login-errors" aria-live="polite">
         <p id="login-error-invalid" class="form-error" hidden>비밀번호가 올바르지 않습니다</p>
-        <p id="login-error-locked" class="form-error" hidden>잠시 후 다시 시도하세요 (60초)</p>
-        <p id="login-error-other" class="form-error" hidden></p>
+        <p id="login-error-locked" class="form-error" hidden></p>
+        <p id="login-error-net" class="form-error" hidden></p>
       </div>
     </form>
   </div>

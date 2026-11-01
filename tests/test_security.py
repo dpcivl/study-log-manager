@@ -1093,10 +1093,12 @@ def test_sec5_미로그인에서_잘못된_id_화면_주소는_302_login(client,
 
 
 @pytest.mark.parametrize("path", BAD_PAGE_PATHS)
-def test_sec5_로그인_상태에서_잘못된_id_화면_주소는_404_공통_모양(auth_client, path):
+def test_sec5_로그인_상태에서_잘못된_id_화면_주소는_404_S6_HTML(auth_client, path):
+    """F11: 화면 주소의 404는 JSON이 아니라 같은 상태 코드의 S6 HTML이다."""
     response = auth_client.get(path, follow_redirects=False)
-    error = assert_error_shape(response, 404)
-    assert error["code"] == NOT_FOUND_CODE
+    assert response.status_code == 404, response.text[:200]
+    assert response.headers["content-type"].startswith("text/html")
+    assert "페이지를 찾을 수 없습니다" in response.text
 
 
 # ---------------------------------------------------------------------------
@@ -1991,7 +1993,8 @@ def test_sec6_일반_예외_500은_미로그인_경로에서도_같은_모양(se
     with TestClient(app, raise_server_exceptions=False) as client:
         response = client.get("/_sec6_boom_page", follow_redirects=False)
     assert response.status_code == 500
-    assert response.json() == INTERNAL_ERROR_BODY
+    assert response.headers["content-type"].startswith("text/html")
+    assert "일시적인 문제가 발생했습니다" in response.text
     assert "another-secret-text" not in response.text
     assert_security_headers(response)
 

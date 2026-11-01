@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}{% if status == 404 %}페이지를 찾을 수 없습니다{% else %}일시적인 문제가 발생했습니다{% endif %} - Study Log{% endblock %}
+{% block content %}
+<!-- S6 -->
+<section id="s6" aria-labelledby="s6-title">
+  <div class="page error-screen">
+    <h1 class="app-name">Study Log</h1>
+    {% if status == 404 %}
+    <div id="s6-404">
+      <h2 id="s6-title">페이지를 찾을 수 없습니다</h2>
+      <p class="error-desc">주소를 확인해 주세요</p>
+    </div>
+    {% else %}
+    <div id="s6-500">
+      <h2 id="s6-title">일시적인 문제가 발생했습니다</h2>
+      <p class="error-desc">잠시 후 다시 시도해 주세요</p>
+    </div>
+    {% endif %}
+    <a class="btn btn-secondary" href="/">주제 목록으로</a>
+  </div>
+</section>
+{% endblock %}

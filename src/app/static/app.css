@@ -214,3 +214,10 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .note-content pre.render-fail-raw, .preview-box pre.render-fail-raw { margin: 0; padding: 12px; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 14px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
 /* 깊은 인용(F7): 1~3겹은 브라우저 기본 들여쓰기 그대로, 4겹부터는 들여쓰기를 더하지 않아 글 폭이 줄거나 페이지가 가로로 넘치지 않는다 */
 .note-content blockquote blockquote blockquote blockquote, .preview-box blockquote blockquote blockquote blockquote { margin-inline: 0; }
+
+/* 오류 화면 S6 (F11) */
+.error-screen { text-align: center; align-items: center; padding-top: 64px; }
+.error-screen h1 { margin: 0; font-size: 18px; font-weight: 700; }
+.error-screen h2 { margin: 0 0 8px; }
+.error-desc { margin: 0; color: var(--muted); }
+.error-screen .btn { display: inline-flex; align-items: center; text-decoration: none; }

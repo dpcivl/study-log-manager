@@ -10,13 +10,16 @@ const url = '/api/subjects/' + subjectId;
 const title = document.getElementById('s3-title');
 const summary = document.getElementById('subject-summary');
 const background = document.getElementById('subject-background');
+const summaryError = document.getElementById('summary-error');
 const loadError = document.getElementById('subject-load-error');
 const editBtn = document.getElementById('subject-edit-btn');
 const form = document.getElementById('subject-edit-form');
 const submitBtn = form.querySelector('button[type="submit"]');
 let subject = null;
+let summarySeq = 0;
 
 function renderSummary(sub) {
+  summaryError.hidden = true; // 서버 값으로 다시 그렸으니 갱신 실패 문구는 사라진다
   title.textContent = sub.name;
   document.title = sub.name + ' - Study Log';
   summary.replaceChildren();
@@ -53,8 +56,13 @@ async function load() {
 
 // 공부 기록이 바뀐 뒤 요약 줄(누적, 최근 7일, 공부한 날)을 서버 값으로 다시 맞춘다.
 async function refreshSummary() {
+  const seq = ++summarySeq;
   const res = await api('GET', url);
-  if (!res.ok) return;
+  if (seq !== summarySeq) return; // 더 나중에 시작한 갱신이 결과를 정한다
+  if (!res.ok) {
+    summaryError.hidden = false; // 기록은 바뀌었지만 요약은 옛 값 그대로다. 다음에 성공하면 사라진다
+    return;
+  }
   subject = res.data;
   renderSummary(subject);
 }

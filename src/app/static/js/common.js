@@ -1,37 +1,76 @@
 // 여러 화면이 같이 쓰는 도우미. 사용자 텍스트는 textContent로만 DOM에 넣는다.
 
+// 요청 하나를 기다리는 최대 시간(F11). 이 안에 응답이 없으면 요청을 끊는다.
+export const REQUEST_TIMEOUT_MS = 15000;
+
+const CONNECT_FAIL_MESSAGE = '서버에 연결할 수 없습니다';
+const TIMEOUT_GET_MESSAGE = '서버 응답이 없습니다. 잠시 후 다시 시도하세요';
+const TIMEOUT_WRITE_MESSAGE = '응답을 받지 못했습니다. 저장되었는지 확인한 뒤 다시 시도하세요';
+export const BAD_RESPONSE_MESSAGE = '서버 응답을 해석할 수 없습니다';
+
+// 시간 제한이 있는 fetch. 본문 읽기(readBody)까지 같은 제한 안에서 끝나야 한다.
+// 실패(연결 실패, 시간 초과)면 { failure: 화면에 보일 문구 }를 돌려준다.
+// 응답을 받았으면 { response, body, bodyOk }를 돌려준다. 본문을 못 읽었으면 bodyOk가 false다.
+export async function timedFetch(url, options, readBody) {
+  const method = (options.method || 'GET').toUpperCase();
+  const controller = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+  const timeoutFailure = () => ({ failure: method === 'GET' ? TIMEOUT_GET_MESSAGE : TIMEOUT_WRITE_MESSAGE });
+  try {
+    const response = await fetch(url, { ...options, signal: controller.signal });
+    let body = null;
+    let bodyOk = true;
+    try {
+      body = await readBody(response);
+    } catch {
+      bodyOk = false;
+    }
+    if (timedOut) return timeoutFailure();
+    return { response, body, bodyOk };
+  } catch {
+    return timedOut ? timeoutFailure() : { failure: CONNECT_FAIL_MESSAGE };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// 2xx 응답의 본문이 JSON 객체인가. 204는 본문이 없으므로 따지지 않는다.
+export function isUsableSuccess(response, body, bodyOk) {
+  if (response.status === 204) return true;
+  return bodyOk && body !== null && typeof body === 'object';
+}
+
 // JSON API 호출. 401이면 /login으로 보내고 응답을 돌려주지 않는다(페이지가 이동한다).
-// 네트워크 오류면 { ok: false, status: 0, data: null }을 돌려준다.
+// 실패하면 { ok: false, status, data, message? }를 돌려준다. 연결 실패와 시간 초과는 status 0,
+// 2xx인데 JSON이 아닌 응답은 그 상태 코드로 오며, 둘 다 message에 화면에 보일 문구가 있다.
+// ok가 true이면 204가 아닌 한 data는 JSON 객체다.
 export async function api(method, url, body) {
   const options = { method, headers: {} };
   if (body !== undefined) {
     options.headers['Content-Type'] = 'application/json';
     options.body = JSON.stringify(body);
   }
-  let response;
-  try {
-    response = await fetch(url, options);
-  } catch {
-    return { ok: false, status: 0, data: null };
-  }
+  const result = await timedFetch(url, options, (res) => (res.status === 204 ? null : res.json()));
+  if (result.failure) return { ok: false, status: 0, data: null, message: result.failure };
+  const { response } = result;
   if (response.status === 401) {
     location.href = '/login';
     return new Promise(() => {});
   }
-  let data = null;
-  if (response.status !== 204) {
-    try {
-      data = await response.json();
-    } catch {
-      data = null;
-    }
+  if (response.ok && !isUsableSuccess(response, result.body, result.bodyOk)) {
+    return { ok: false, status: response.status, data: null, message: BAD_RESPONSE_MESSAGE };
   }
-  return { ok: response.ok, status: response.status, data };
+  return { ok: response.ok, status: response.status, data: result.bodyOk ? result.body : null };
 }
 
 // 실패 응답에서 화면에 보일 문구를 고른다.
 export function errorMessage(res, fallback) {
-  if (res.status === 0) return '서버에 연결할 수 없습니다';
+  if (res.message) return res.message;
+  if (res.status === 0) return CONNECT_FAIL_MESSAGE;
   return (res.data && res.data.error && res.data.error.message) || fallback;
 }
 
