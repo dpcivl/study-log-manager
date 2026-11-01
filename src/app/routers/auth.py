@@ -31,7 +31,8 @@ def login(payload: LoginRequest, request: Request, response: Response) -> None:
     limiter: LoginRateLimiter = request.app.state.login_limiter
     ip = client_ip(request)
 
-    if not settings.secret_key.get_secret_value():
+    # APP_PASSWORD나 SECRET_KEY가 비어 있으면 어떤 비밀번호도 맞을 수 없다. 실패 횟수에 세지 않는다.
+    if not settings.secret_key.get_secret_value() or not settings.app_password.get_secret_value():
         raise APIError(500, "server_misconfigured", "서버 설정이 올바르지 않습니다")
 
     # 잠금 확인과 시도 예약을 한 번에 한다. 비교 결과를 기다리지 않으므로

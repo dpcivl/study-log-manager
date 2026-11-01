@@ -4,21 +4,57 @@ PUBLIC_DEPLOY를 켜면 약한 SECRET_KEY·APP_PASSWORD로는 앱이 시작되�
 """
 
 from functools import lru_cache
+from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
+
+# 프로젝트 폴더(src/의 부모). .env와 상대 경로 DB는 실행한 폴더가 아니라 여기를 기준으로 찾는다.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
 MIN_SECRET_KEY_LENGTH = 32
 MIN_APP_PASSWORD_LENGTH = 12
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=PROJECT_ROOT / ".env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     app_password: SecretStr = SecretStr("")
     secret_key: SecretStr = SecretStr("")
     database_url: str = "sqlite:///data/study.db"
     public_deploy: bool = False
+
+    @field_validator("database_url")
+    @classmethod
+    def _anchor_relative_sqlite_path(cls, value: str) -> str:
+        return anchor_sqlite_url(value)
+
+
+def anchor_sqlite_url(url: str) -> str:
+    """상대 경로의 SQLite 파일 URL을 프로젝트 폴더 기준 절대 경로로 바꾼다.
+
+    메모리 DB, 절대 경로, SQLite가 아닌 URL, 해석할 수 없는 URL은 그대로 둔다.
+    형식 오류는 여기서 거부하지 않는다. 시작할 때 DATABASE_URL 오류로 알린다.
+    """
+    try:
+        parsed = make_url(url)
+    except (ArgumentError, ValueError):  # 포트·쿼리 값이 틀린 URL도 시작할 때 알린다
+        return url
+    database = parsed.database
+    if (
+        not parsed.drivername.startswith("sqlite")
+        or not database
+        or database == ":memory:"
+        or database.startswith("file:")
+        or parsed.query.get("uri")
+        or Path(database).is_absolute()
+    ):
+        return url
+    return parsed.set(database=str(PROJECT_ROOT / database)).render_as_string(hide_password=False)
 
 
 def _weakness(name: str, value: str, min_length: int) -> str | None:

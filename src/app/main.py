@@ -8,12 +8,13 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.exc import DBAPIError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app import models  # noqa: F401  (테이블 등록)
 from app.auth import LoginRateLimiter, LoginRedirect, is_logged_in
 from app.body_limit import BodySizeLimitMiddleware
-from app.db import Base, make_engine, make_session_factory
+from app.db import BUSY_TIMEOUT_SECONDS, is_storage_busy, make_session_factory
 from app.errors import (
     BODY_INVALID_MESSAGE,
     NOT_FOUND_MESSAGES,
@@ -28,9 +29,9 @@ from app.settings import (
     MIN_APP_PASSWORD_LENGTH,
     MIN_SECRET_KEY_LENGTH,
     Settings,
-    get_settings,
     weak_secret_problems,
 )
+from app.startup import StartupError, load_settings, open_storage
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ STATIC_DIR = Path(__file__).resolve().parent / "static"
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or get_settings()
+    settings = settings or load_settings()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -60,11 +61,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 MIN_SECRET_KEY_LENGTH,
                 MIN_APP_PASSWORD_LENGTH,
             )
-        url = settings.database_url
-        if url.startswith("sqlite:///") and ":memory:" not in url:
-            Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-        engine = make_engine(settings.database_url)
-        Base.metadata.create_all(engine)
+        try:
+            engine = open_storage(settings.database_url)
+        except StartupError as exc:
+            logger.error("%s", exc)
+            raise
         app.state.engine = engine
         app.state.session_factory = make_session_factory(engine)
         yield
@@ -112,6 +113,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(APIError)
     async def api_error_handler(request: Request, exc: APIError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content=exc.body())
+
+    @app.exception_handler(DBAPIError)
+    async def storage_error_handler(request: Request, exc: DBAPIError) -> JSONResponse:
+        # SQL, 경로, 예외 문구는 응답에 넣지 않고 로그에만 남긴다. 바인딩 값은 로그에도 넣지 않는다
+        # (exc 자체를 문자열로 만들지 않고 오류 종류와 DB 드라이버 문구, SQL 문장만 쓴다).
+        busy = is_storage_busy(exc)
+        logger.error(
+            "저장소 오류(%s): %s %r %s: %s | SQL: %s",
+            "storage_busy" if busy else "storage_unavailable",
+            request.method,
+            request.scope["path"],
+            type(exc).__name__,
+            exc.orig,
+            exc.statement,
+        )
+        if busy:
+            return error_response(
+                503,
+                "storage_busy",
+                "저장소가 잠시 바쁩니다. 잠시 후 다시 시도하세요",
+                headers={"Retry-After": str(BUSY_TIMEOUT_SECONDS)},
+                retry_after=BUSY_TIMEOUT_SECONDS,
+            )
+        return error_response(
+            503, "storage_unavailable", "저장소에 문제가 있어 처리하지 못했습니다"
+        )
 
     @app.exception_handler(LoginRedirect)
     async def login_redirect_handler(request: Request, exc: LoginRedirect) -> RedirectResponse:

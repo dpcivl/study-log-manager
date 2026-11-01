@@ -3,7 +3,8 @@
 ## 공통 규칙
 - 모든 `/api/*` 요청·응답은 JSON(`Content-Type: application/json`)이다. F6 내보내기만 `text/markdown`.
 - 로그인·로그아웃을 제외한 모든 API는 `session` 쿠키가 유효해야 한다. 없거나 만료면 `401 {"error":{"code":"unauthorized","message":"로그인이 필요합니다"}}`.
-- 오류 응답은 모두 `{"error":{"code": string, "message": string, "fields"?: {필드명: 메시지}, "retry_after"?: 초}}` 모양이다. `fields`는 422에서만, `retry_after`는 429에서만 붙는다. 검증 실패는 422, 없는 자원은 404.
+- 오류 응답은 모두 `{"error":{"code": string, "message": string, "fields"?: {필드명: 메시지}, "retry_after"?: 초}}` 모양이다. `fields`는 422에서만, `retry_after`는 429와 503 `storage_busy`에서만 붙는다. 검증 실패는 422, 없는 자원은 404.
+- DB를 쓰는 모든 API는 저장소 장애에서 503을 돌려준다(아래 "F10 저장소 장애"). 표의 오류 응답 칸에는 따로 적지 않는다.
 - 본문이 있는 POST·PATCH는 `Content-Type: application/json`이어야 한다. 아니면 `415 {"error":{"code":"unsupported_media_type","message":"JSON 형식으로 보내야 합니다"}}`.
 - 날짜는 `YYYY-MM-DD`, 시각은 ISO 8601 UTC(`2026-10-31T11:20:00Z`). 만들 수 없는 날짜(`0000-01-01` 등)는 422다.
 - 목록은 `{"items": [...], "total": n, "page": p, "limit": l}` 모양이고 `page`는 1부터, `limit` 기본 20·최대 100.
@@ -39,7 +40,7 @@ HTML 페이지는 뼈대만 내려주고, 데이터는 페이지의 JS가 위 AP
 
 | 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
 |---|---|---|---|---|---|
-| F5 | POST | /api/login | `{password}` | 204 + `Set-Cookie: session=...; HttpOnly; SameSite=Lax; Max-Age=2592000` | 401 invalid_password / 429 too_many_attempts |
+| F5 | POST | /api/login | `{password}` | 204 + `Set-Cookie: session=...; HttpOnly; SameSite=Lax; Max-Age=2592000` | 401 invalid_password / 429 too_many_attempts / 500 server_misconfigured |
 | F5 | POST | /api/logout | 없음 | 204 + 쿠키 삭제 | 403 forbidden |
 
 ### F5 POST /api/login
@@ -56,6 +57,10 @@ HTML 페이지는 뼈대만 내려주고, 데이터는 페이지의 JS가 위 AP
 오류 429 (5회 연속 실패 후 60초)
 ```json
 { "error": { "code": "too_many_attempts", "message": "잠시 후 다시 시도하세요", "retry_after": 60 } }
+```
+오류 500 (`APP_PASSWORD`나 `SECRET_KEY`가 비어 있을 때. 어떤 비밀번호를 보내도 같고, 실패 횟수에 세지 않는다)
+```json
+{ "error": { "code": "server_misconfigured", "message": "서버 설정이 올바르지 않습니다" } }
 ```
 
 `password`가 1024자를 넘으면 비교 없이 401 `invalid_password`를 내고, 실패 횟수에 들어간다.
@@ -276,3 +281,22 @@ PATCH 요청 예(미해결 질문에 답을 채움)
 ...
 ```
 공부 기록은 날짜 오름차순, 노트는 유형별 섹션 안에서 생성 오름차순. 미해결 노트는 제목 뒤에 ` (미해결)`을 붙인다.
+
+## F10 저장소 장애
+
+DB를 쓰는 모든 `/api/*`에 공통이다. SQLAlchemy가 던진 DB 오류만 503으로 바꾸고, 그 밖의 예외는 500 `internal_error`다. 오류 내용(SQL, 경로, 예외 문구)은 응답에 넣지 않고 서버 로그에만 남긴다.
+
+| 기능 ID | 상황 | 상태 | code | message | 비고 |
+|---|---|---|---|---|---|
+| F10 | DB가 잠겨 5초 안에 쓰지 못함 | 503 | `storage_busy` | 저장소가 잠시 바쁩니다. 잠시 후 다시 시도하세요 | `retry_after: 5`, `Retry-After: 5` 헤더 |
+| F10 | 읽기 전용, 용량 부족, 테이블 없음, 파일 손상 등 그 밖의 DB 오류 | 503 | `storage_unavailable` | 저장소에 문제가 있어 처리하지 못했습니다 | 재시도 안내 없음 |
+
+오류 503 `storage_busy`
+```json
+{ "error": { "code": "storage_busy", "message": "저장소가 잠시 바쁩니다. 잠시 후 다시 시도하세요", "retry_after": 5 } }
+```
+오류 503 `storage_unavailable`
+```json
+{ "error": { "code": "storage_unavailable", "message": "저장소에 문제가 있어 처리하지 못했습니다" } }
+```
+화면은 자동으로 다시 보내지 않는다. 서버 문구를 보이고, 입력을 유지하고, 버튼을 다시 켠다.

@@ -3,8 +3,12 @@
 프로젝트 폴더에서 `python scripts/seed_bigdata.py`로 실행한다.
 DB 주소는 앱과 같이 `DATABASE_URL`(환경 변수 또는 .env)을 따른다.
 같은 이름의 주제가 이미 있으면 아무것도 바꾸지 않고 끝낸다.
+저장소는 앱과 같은 방식(`app.startup.open_storage`)으로 연다. 폴더나 DB 파일이 없으면
+소유자 전용(폴더 700, 파일 600)으로 만들고, 이미 있는 것의 권한은 바꾸지 않는다.
+열지 못하면 "시작 실패: ..." 한 줄을 표준 오류로 보이고 종료 코드 1로 끝난다.
 """
 
+import logging
 import sys
 from datetime import date
 from pathlib import Path
@@ -13,9 +17,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from sqlalchemy import select  # noqa: E402
 
-from app.db import Base, make_engine, make_session_factory  # noqa: E402
+from app.db import make_session_factory  # noqa: E402
 from app.models import Note, StudySession, Subject  # noqa: E402
-from app.settings import get_settings  # noqa: E402
+from app.startup import StartupError, load_settings, open_storage  # noqa: E402
 
 SUBJECT = {
     "name": "빅데이터분석기사 실기",
@@ -107,12 +111,14 @@ NOTES = [
 
 
 def main() -> int:
-    url = get_settings().database_url
-    if url.startswith("sqlite:///") and ":memory:" not in url:
-        Path(url.removeprefix("sqlite:///")).parent.mkdir(parents=True, exist_ok=True)
-
-    engine = make_engine(url)
-    Base.metadata.create_all(engine)
+    url = load_settings().database_url
+    # 시드는 처음 써 볼 때 도는 것이라 "새 빈 DB" 경고는 오해를 부른다. 시작 실패만 보인다.
+    logging.getLogger("app.startup").setLevel(logging.ERROR)
+    try:
+        engine = open_storage(url)  # 앱과 같은 경로: 새 폴더 700, 새 파일 600, 테이블 준비
+    except StartupError as exc:
+        print(exc, file=sys.stderr)
+        return 1
     session_factory = make_session_factory(engine)
 
     try:
