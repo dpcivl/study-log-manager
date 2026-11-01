@@ -207,6 +207,13 @@
   .error-screen h2 { margin: 0 0 8px; }
   .error-desc { margin: 0; color: var(--muted); }
   .topbar-actions .btn, .note-view .form-actions .btn { text-decoration: none; display: inline-flex; align-items: center; }
+  .render-fail-notice { margin: 0 0 8px; color: var(--danger); font-weight: 600; }
+  .render-fail-raw { margin: 0; padding: 12px; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 14px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+  /* 목업 전용 상황 재현 패널 */
+  .mock-panel { position: fixed; right: 12px; bottom: 12px; z-index: 10; max-width: calc(100vw - 24px); width: 280px; padding: 8px 12px; background: var(--surface); border: 1px dashed var(--line-strong); border-radius: var(--radius); font-size: 14px; }
+  .mock-panel summary { cursor: pointer; font-weight: 600; }
+  .mock-panel p { margin: 6px 0; color: var(--muted); font-size: 13px; }
+  .mock-panel .check, .mock-panel .btn { margin-top: 6px; }
 </style>
 </head>
 <body>
@@ -381,7 +388,7 @@
             <button id="preview-toggle" class="btn btn-secondary" type="button" aria-pressed="false">미리보기</button>
           </div>
           <textarea id="note-body" class="input" maxlength="50000"></textarea>
-          <div id="note-preview" class="preview-box" hidden></div>
+          <div id="note-preview" class="preview-box" hidden></div><!-- F7 -->
           <p id="body-counter" class="counter">0 / 50,000자</p>
         </div>
         <p id="note-error" class="form-error" role="alert" hidden></p>
@@ -403,7 +410,7 @@
         <h2 id="s5-title"></h2>
         <div id="note-view-meta" class="note-meta"></div>
         <p id="note-view-dates" class="note-dates"></p>
-        <div id="note-view-body" class="note-content"></div>
+        <div id="note-view-body" class="note-content"></div><!-- F7 -->
         <div class="form-actions">
           <a id="note-edit-btn" class="btn btn-secondary" href="#s4">수정</a>
           <button id="note-delete-btn" class="btn btn-danger" type="button">삭제</button>
@@ -429,6 +436,14 @@
   </section>
 
 </main>
+
+<!-- 목업 전용: 상황 재현 패널. 제품 화면이 아니며 실제 앱에는 없다. -->
+<details id="mock-panel" class="mock-panel">
+  <summary>상황 재현</summary>
+  <p>목업 전용, 실제 앱에는 없음</p>
+  <label class="check"><input id="mock-render-fail" type="checkbox"> 마크다운 렌더 실패 (F7)</label>
+  <button id="mock-fail-note" class="btn btn-secondary" type="button">렌더 실패 노트 열기 (&gt; 50,000자)</button>
+</details>
 <script>
   // 더미 데이터: design.md 5절 GET /api/subjects 응답 모양. 생성 최신순.
   var TODAY = '2026-10-31';
@@ -877,6 +892,26 @@
     return html;
   }
 
+  // F7: 렌더 실패 복구. 변환이 실패하면 원문을 글자 그대로 보이고 그 위에 안내 문구를 보인다.
+  var RENDER_FAIL_NOTICE = '서식을 적용하지 못해 원문으로 표시합니다';
+  var mockRenderFail = false; // 목업 전용 상황 재현 패널이 켠다
+  function renderMarkdownOrThrow(src) {
+    // 실제 앱에서는 '>' 50,000자 같은 본문이 변환·정화 단계에서 실패한다. 목업은 그 상황을 흉내 낸다.
+    if (mockRenderFail || (src.length >= 50000 && /^>+$/.test(src))) throw new Error('render failed');
+    return renderMarkdown(src);
+  }
+  function renderBodyInto(box, src) { // 성공이면 렌더 결과, 실패면 문구 + 원문(textContent)
+    if (!src) { box.innerHTML = '<p>(내용 없음)</p>'; return; }
+    try {
+      box.innerHTML = renderMarkdownOrThrow(src);
+    } catch (e) {
+      var raw = el('pre', 'render-fail-raw', src); // 원문은 textContent로만 넣는다
+      var notice = el('p', 'render-fail-notice', RENDER_FAIL_NOTICE);
+      notice.setAttribute('role', 'status');
+      box.replaceChildren(notice, raw);
+    }
+  }
+
   // ---- S4 노트 편집 (작성·수정 공용) ----
   var DEBUG_TEMPLATE = '## 문제상황\n\n## 원인\n\n## 해결\n';
   var TITLE_ERROR = '제목은 1~200자여야 합니다'; // 422 fields.title 문구
@@ -925,7 +960,7 @@
     notePreview.hidden = false;
     previewToggle.setAttribute('aria-pressed', 'true');
     previewToggle.textContent = '편집';
-    notePreview.innerHTML = noteBody.value ? renderMarkdown(noteBody.value) : '<p>(내용 없음)</p>';
+    renderBodyInto(notePreview, noteBody.value); // F7: 실패하면 원문 + 문구. "편집"을 누르면 입력은 그대로
   });
   document.getElementById('new-note-btn').addEventListener('click', function () { openEditor(null); });
   document.getElementById('note-edit-btn').addEventListener('click', function () { openEditor(viewNoteId); });
@@ -984,7 +1019,7 @@
     n.tags.forEach(function (t) { meta.appendChild(el('span', 'tag', t)); });
     if (n.is_open) meta.appendChild(el('span', 'badge-open', '미해결'));
     dates.replaceChildren(el('span', '', '작성 ' + n.created_at.slice(0, 10)), el('span', '', '수정 ' + n.updated_at.slice(0, 10)));
-    body.innerHTML = n.body ? renderMarkdown(n.body) : '<p>(내용 없음)</p>';
+    renderBodyInto(body, n.body); // F7: 실패해도 제목·수정·삭제 버튼은 그대로 보인다
   }
   document.getElementById('note-delete-btn').addEventListener('click', function () { // DELETE /api/notes/{id} → 204
     if (!confirm('이 노트를 삭제할까요?')) return;
@@ -1010,8 +1045,29 @@
       document.getElementById('s6-500').hidden = status !== 500;
     }
     document.querySelectorAll('#app > section').forEach(function (sec) { sec.hidden = sec !== target; });
+    document.getElementById('mock-panel').hidden = id === 's1'; // 목업 전용 패널은 로그인 뒤에만
     if (id === 's1') document.getElementById('login-password').focus();
   }
+
+  // 목업 전용 상황 재현 패널 (F7): 렌더 실패를 켜고 끄고, 50,000자 '>' 노트를 열어 본다.
+  document.getElementById('mock-render-fail').addEventListener('change', function (event) {
+    mockRenderFail = event.target.checked;
+    renderNoteView();
+    if (!notePreview.hidden) renderBodyInto(notePreview, noteBody.value);
+  });
+  document.getElementById('mock-fail-note').addEventListener('click', function () {
+    var title = '렌더 실패 확인용 노트 (> 50,000자)';
+    var n = notes.filter(function (x) { return x.title === title && x.subject_id === currentSubjectId; })[0];
+    if (!n) {
+      n = { id: Date.now(), subject_id: currentSubjectId, kind: 'debug', title: title, body: new Array(50001).join('>'),
+        tags: ['목업'], is_open: false, created_at: TODAY + 'T12:00:00Z', updated_at: TODAY + 'T12:00:00Z' };
+      notes.push(n);
+      refreshNotes();
+    }
+    viewNoteId = n.id;
+    renderNoteView();
+    location.hash = '#s5';
+  });
 
   // F5 세션 흉내: 서명 쿠키 대신 발급 시각을 localStorage에 두고 30일이 지나면 거부한다.
   var SESSION_KEY = 'study-log-mockup-session';
