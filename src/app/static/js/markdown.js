@@ -27,7 +27,31 @@ if (typeof marked !== 'undefined') {
   });
 }
 
+const RENDER_FAIL_NOTICE = '서식을 적용하지 못해 원문으로 표시합니다';
+
+// 렌더에 실패했다. 안내 문구 아래에 원문을 글자 그대로(textContent) 보인다. (F7)
+function showRawSource(target, source) {
+  const notice = el('p', 'render-fail-notice', RENDER_FAIL_NOTICE);
+  notice.setAttribute('role', 'status');
+  target.replaceChildren(notice, el('pre', 'render-fail-raw', source));
+}
+
+// 코드 강조는 꾸밈일 뿐이다. 실패하면 그 블록은 강조 없이 둔다(문구 없음).
+function highlightCode(target) {
+  if (typeof hljs === 'undefined') return;
+  for (const code of target.querySelectorAll('pre code')) {
+    try {
+      // ```python 처럼 언어를 적은 블록만 강조한다(언어가 없으면 그대로 둔다).
+      const match = /(?:^|\s)language-([\w+#-]+)/.exec(code.className);
+      if (match && hljs.getLanguage(match[1])) hljs.highlightElement(code);
+    } catch (e) {
+      // 강조 없는 렌더 결과를 그대로 둔다.
+    }
+  }
+}
+
 // source 마크다운을 target 안에 렌더한다. target의 기존 내용은 지운다.
+// 변환·정화·삽입이 실패해도 던지지 않는다: 안내 문구와 원문을 보인다. (F7)
 export function renderMarkdown(target, source) {
   if (!source.trim()) {
     target.replaceChildren(el('p', '', '(내용 없음)'));
@@ -35,16 +59,21 @@ export function renderMarkdown(target, source) {
   }
   if (typeof marked === 'undefined' || typeof DOMPurify === 'undefined') {
     // 라이브러리를 불러오지 못했다. 정화 없이 HTML을 만들 수 없으므로 원문을 글자 그대로 보인다.
-    const pre = el('pre', '', source);
-    target.replaceChildren(pre);
+    showRawSource(target, source);
     return;
   }
-  const html = marked.parse(source, { async: false, gfm: true, breaks: true });
-  target.replaceChildren(DOMPurify.sanitize(html, PURIFY_CONFIG));
-  if (typeof hljs === 'undefined') return;
-  for (const code of target.querySelectorAll('pre code')) {
-    // ```python 처럼 언어를 적은 블록만 강조한다(언어가 없으면 그대로 둔다).
-    const match = /(?:^|\s)language-([\w+#-]+)/.exec(code.className);
-    if (match && hljs.getLanguage(match[1])) hljs.highlightElement(code);
+  try {
+    const html = marked.parse(source, { async: false, gfm: true, breaks: true });
+    const fragment = DOMPurify.sanitize(html, PURIFY_CONFIG);
+    // 정화기가 예외 없이 null이나 문자열을 돌려줄 때가 있다(예: <frameset>abc). 문서 조각이 아니면 정화 실패다.
+    if (!fragment || fragment.nodeType !== Node.DOCUMENT_FRAGMENT_NODE) {
+      throw new Error('sanitize did not return a document fragment');
+    }
+    target.replaceChildren(fragment);
+  } catch (e) {
+    // 예: 깊게 중첩된 본문에서 변환기가 RangeError(스택 초과)를 던진다.
+    showRawSource(target, source);
+    return;
   }
+  highlightCode(target);
 }

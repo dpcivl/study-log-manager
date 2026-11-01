@@ -209,3 +209,8 @@ a.btn { display: inline-flex; align-items: center; text-decoration: none; }
 .note-content pre code, .preview-box pre code { padding: 0; border: 0; background: none; font-size: 14px; line-height: 1.6; }
 /* highlight.js 테마의 배경·여백은 pre가 맡는다. 글자색만 테마를 따른다 */
 .note-content pre code.hljs, .preview-box pre code.hljs { padding: 0; background: none; }
+/* 렌더 실패 복구(F7): 안내 문구와 원문 상자. 원문 상자는 높이를 화면의 60%로 제한해 아래 버튼이 멀어지지 않게 한다 */
+.render-fail-notice { margin: 0 0 8px; color: var(--danger); font-weight: 600; }
+.note-content pre.render-fail-raw, .preview-box pre.render-fail-raw { margin: 0; padding: 12px; max-height: 60vh; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font-family: var(--mono); font-size: 14px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); }
+/* 깊은 인용(F7): 1~3겹은 브라우저 기본 들여쓰기 그대로, 4겹부터는 들여쓰기를 더하지 않아 글 폭이 줄거나 페이지가 가로로 넘치지 않는다 */
+.note-content blockquote blockquote blockquote blockquote, .preview-box blockquote blockquote blockquote blockquote { margin-inline: 0; }
