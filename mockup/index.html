@@ -277,7 +277,8 @@
           </div>
           <div class="field">
             <label for="topic-target">목표일 (선택)</label>
-            <input id="topic-target" class="input" type="date" name="target_date">
+            <input id="topic-target" class="input" type="date" name="target_date" aria-describedby="topic-target-error"><!-- F12 -->
+            <p id="topic-target-error" class="form-error" role="alert" hidden></p>
           </div>
         </div>
         <div class="field">
@@ -319,7 +320,8 @@
           </div>
           <div class="field">
             <label for="edit-target">목표일</label>
-            <input id="edit-target" class="input" type="date" name="target_date">
+            <input id="edit-target" class="input" type="date" name="target_date" aria-describedby="edit-target-error"><!-- F12 -->
+            <p id="edit-target-error" class="form-error" role="alert" hidden></p>
           </div>
         </div>
         <div class="field">
@@ -580,6 +582,7 @@ ERROR 시작 실패: DB 파일이 손상되었습니다: /srv/study-log/data/stu
   function toggleTopicForm(open) {
     topicForm.hidden = !open;
     document.getElementById('topic-name-error').hidden = true;
+    document.getElementById('topic-target-error').hidden = true;
     newTopicBtn.setAttribute('aria-expanded', String(open));
     if (open) {
       topicForm.reset();
@@ -589,6 +592,10 @@ ERROR 시작 실패: DB 파일이 손상되었습니다: /srv/study-log/data/stu
   }
   newTopicBtn.addEventListener('click', function () { toggleTopicForm(topicForm.hidden); });
   document.getElementById('topic-cancel').addEventListener('click', function () { toggleTopicForm(false); });
+  var TARGET_ERROR = '목표일은 시작일보다 빠를 수 없습니다';
+  function targetBeforeStart(started, target) { // 목표일이 비면 검사하지 않고, 같은 날은 허용한다
+    return !!target && !!started && target < started;
+  }
   topicForm.addEventListener('submit', function (event) {
     event.preventDefault();
     var name = document.getElementById('topic-name').value.trim();
@@ -600,6 +607,14 @@ ERROR 시작 실패: DB 파일이 손상되었습니다: /srv/study-log/data/stu
       return;
     }
     nameError.hidden = true;
+    var targetError = document.getElementById('topic-target-error');
+    if (targetBeforeStart(document.getElementById('topic-started').value || TODAY, document.getElementById('topic-target').value)) { // 422 fields.target_date (F12)
+      targetError.textContent = TARGET_ERROR;
+      targetError.hidden = false;
+      document.getElementById('topic-target').focus();
+      return;
+    }
+    targetError.hidden = true;
     if (netGate(document.getElementById('topic-submit'), document.getElementById('topic-form-error'), false)) return; // F11
     document.getElementById('topic-form-error').hidden = true;
     subjects.unshift({
@@ -863,6 +878,7 @@ ERROR 시작 실패: DB 파일이 손상되었습니다: /srv/study-log/data/stu
   document.getElementById('subject-edit-btn').addEventListener('click', function () {
     var sub = currentSubject();
     document.getElementById('edit-name-error').hidden = true;
+    document.getElementById('edit-target-error').hidden = true;
     document.getElementById('edit-name').value = sub.name;
     document.getElementById('edit-started').value = sub.started_on;
     document.getElementById('edit-target').value = sub.target_date || '';
@@ -883,9 +899,19 @@ ERROR 시작 실패: DB 파일이 손상되었습니다: /srv/study-log/data/stu
     }
     nameError.hidden = true;
     var sub = currentSubject();
+    var newStarted = document.getElementById('edit-started').value || sub.started_on;
+    var newTarget = document.getElementById('edit-target').value || null;
+    var targetError = document.getElementById('edit-target-error');
+    if (targetBeforeStart(newStarted, newTarget)) { // 서버였다면 PATCH 422 fields.target_date (F12)
+      targetError.textContent = TARGET_ERROR;
+      targetError.hidden = false;
+      document.getElementById('edit-target').focus();
+      return;
+    }
+    targetError.hidden = true;
     sub.name = name;
-    sub.started_on = document.getElementById('edit-started').value || sub.started_on;
-    sub.target_date = document.getElementById('edit-target').value || null;
+    sub.started_on = newStarted;
+    sub.target_date = newTarget;
     sub.background = document.getElementById('edit-background').value;
     sub.updated_at = TODAY + 'T00:00:00Z';
     saveSubjects();
