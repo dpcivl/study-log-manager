@@ -221,6 +221,10 @@
   .mock-panel summary { cursor: pointer; font-weight: 600; }
   .mock-panel p { margin: 6px 0; color: var(--muted); font-size: 13px; }
   .mock-panel .check, .mock-panel .btn { margin-top: 6px; }
+  .mock-fault { margin: 8px 0 0; padding: 4px 8px 8px; border: 1px solid var(--line-strong); border-radius: var(--radius); }
+  .mock-fault legend { padding: 0 4px; font-size: 13px; color: var(--muted); }
+  .mock-logs { margin-top: 8px; }
+  .mock-logs pre { margin: 0; max-height: 160px; overflow: auto; white-space: pre-wrap; word-break: break-all; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -418,7 +422,7 @@
           </div>
         </div>
         <div class="form-actions">
-          <button class="btn btn-primary" type="submit">저장</button>
+          <button id="note-save" class="btn btn-primary" type="submit">저장</button>
           <a id="note-cancel" class="btn btn-secondary" href="#s3" style="text-decoration:none;display:inline-flex;align-items:center">취소</a>
         </div>
       </form>
@@ -472,6 +476,22 @@
   <label class="check"><input id="mock-storage-blocked" type="checkbox"> 브라우저 저장소 사용 불가 (F8)</label>
   <button id="mock-other-edit" class="btn btn-secondary" type="button">다른 곳에서 이 노트 먼저 고치기 (409, F9)</button>
   <button id="mock-other-delete" class="btn btn-secondary" type="button">다른 곳에서 이 노트 지우기 (404, F9)</button>
+  <!-- F10 -->
+  <fieldset class="mock-fault">
+    <legend>저장소 장애 (F10, 노트 저장 때)</legend>
+    <label class="check"><input type="radio" name="mock-storage" value="" checked> 정상</label>
+    <label class="check"><input type="radio" name="mock-storage" value="busy"> DB 잠김 (5초 뒤 503 storage_busy)</label>
+    <label class="check"><input type="radio" name="mock-storage" value="unavailable"> 저장소 문제 (503 storage_unavailable)</label>
+  </fieldset>
+  <details class="mock-logs">
+    <summary>서버 시작 로그 예시 (F10)</summary>
+    <p>화면이 없는 서버 로그입니다. 시작 실패는 프로세스가 0이 아닌 코드로 끝납니다.</p>
+    <pre>WARNING 새 빈 DB를 만들었습니다: /srv/study-log/data/study.db. 기존 데이터가 있었다면 서버를 멈추고 DATABASE_URL과 백업을 확인하세요
+ERROR 시작 실패: 설정 SECRET_KEY 값이 올바르지 않습니다
+ERROR 시작 실패: DATABASE_URL을 확인하세요
+ERROR 시작 실패: DB를 열 수 없습니다: /srv/study-log/data/study.db. 폴더 권한을 확인하세요
+ERROR 시작 실패: DB 파일이 손상되었습니다: /srv/study-log/data/study.db. 백업으로 복원하세요</pre>
+  </details>
   <p id="mock-note" role="status" hidden></p>
 </details>
 <script>
@@ -1129,8 +1149,29 @@
       location.hash = '#s1';
       return;
     }
-    saveNote(editingNoteId === null ? undefined : loadedBase); // F9: 수정 저장은 항상 expected_updated_at을 보낸다
+    var expected = editingNoteId === null ? undefined : loadedBase; // F9: 수정 저장은 항상 expected_updated_at을 보낸다
+    var fault = document.querySelector('input[name="mock-storage"]:checked').value;
+    var titleOk = noteTitle.value.trim() && noteTitle.value.trim().length <= 200;
+    if (fault && titleOk) { storageFault(fault); return; } // F10: 입력값 검사(422)는 DB 앞이라 통과한 저장만 장애를 만난다
+    saveNote(expected);
   });
+  var noteSaveBtn = document.getElementById('note-save');
+  var storageTimer = null;
+  function storageFault(kind) { // F10: 503. 자동으로 다시 보내지 않는다. 서버 문구를 보이고 입력을 유지하고 버튼을 다시 켠다
+    if (storageTimer) return;
+    noteError.hidden = true;
+    noteSaveBtn.disabled = true;
+    noteSaveBtn.textContent = '저장 중…';
+    storageTimer = setTimeout(function () {
+      storageTimer = null;
+      noteError.textContent = kind === 'busy'
+        ? '저장소가 잠시 바쁩니다. 잠시 후 다시 시도하세요' // 503 storage_busy, retry_after 5
+        : '저장소에 문제가 있어 처리하지 못했습니다'; // 503 storage_unavailable, 재시도 안내 없음
+      noteError.hidden = false;
+      noteSaveBtn.disabled = false;
+      noteSaveBtn.textContent = '저장';
+    }, kind === 'busy' ? 5000 : 300); // 잠김은 5초 기다린 뒤 실패
+  }
   function nextStamp(prev) { // 서버의 지금 시각 흉내: 초 단위 ISO, 이전 값보다 항상 뒤
     var d = new Date();
     var t = TODAY + 'T' + d.toISOString().slice(11, 19) + 'Z';
