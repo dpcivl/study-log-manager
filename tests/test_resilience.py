@@ -20,6 +20,15 @@ F10 저장소 장애 처리
   프로세스가 0이 아닌 코드로 끝난다.
 - 로그인: APP_PASSWORD나 SECRET_KEY가 비어 있으면 500 `server_misconfigured`.
 
+F12 날짜 규칙
+완료 기준
+- 주제를 만들거나 고칠 때 목표일이 시작일보다 빠르면 422 `fields.target_date`이고,
+  같은 날은 허용된다.
+  (PATCH는 `started_on`이나 `target_date`를 하나라도 보내면 보낸 값과 저장된 값을 합친
+   결과로 검사한다. 둘 다 보내지 않으면 검사하지 않는다. 규칙 전에 저장된 값은 그대로 읽힌다.
+   공부 기록의 미래 날짜, 시작일 이전 날짜, 같은 날 합계 1440분 초과, 연도 범위는
+   제한하지 않는다.)
+
 F9 수정 충돌 감지
 완료 기준
 - S4를 연 뒤 다른 곳에서 같은 노트를 고치고 저장하면 409가 오고, 입력은 그대로이며 서버 버전의
@@ -2616,3 +2625,589 @@ def test_f9_unsupported_media_type_is_still_415(auth_client: TestClient):
     )
     assert response.status_code == 415
     assert response.json()["error"]["code"] == "unsupported_media_type"
+
+
+# ---------------------------------------------------------------------------
+# F12: 목표일은 시작일보다 빠를 수 없다
+# ---------------------------------------------------------------------------
+
+F12_MESSAGE = "목표일은 시작일보다 빠를 수 없습니다"
+F12_TOP_MESSAGE = "입력값을 확인하세요"
+
+
+@dataclass
+class F12Env:
+    client: TestClient
+    db: Path
+
+
+@pytest.fixture
+def f12(tmp_path: Path):
+    db = tmp_path / "x.db"
+    app = create_app(make_settings(database_url="sqlite:///" + str(db)))
+    with TestClient(app) as client:
+        login = client.post("/api/login", json={"password": TEST_PASSWORD})
+        assert login.status_code == 204, login.text
+        yield F12Env(client, db)
+
+
+def f12_payload(started_on: str, target_date=..., name: str = "날짜 규칙 주제") -> dict:
+    payload = {"name": name, "background": "", "started_on": started_on}
+    if target_date is not ...:
+        payload["target_date"] = target_date
+    return payload
+
+
+def f12_create(
+    client: TestClient,
+    started_on: str,
+    target_date=...,
+    name: str = "날짜 규칙 주제",
+) -> dict:
+    response = client.post("/api/subjects", json=f12_payload(started_on, target_date, name))
+    assert response.status_code == 201, response.text
+    return response.json()
+
+
+def f12_get(client: TestClient, sid: int) -> dict:
+    response = client.get(f"/api/subjects/{sid}")
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def f12_assert_target_error(response) -> None:
+    assert response.status_code == 422, response.text
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert error["message"] == F12_TOP_MESSAGE
+    assert set(error["fields"].keys()) == {"target_date"}
+    assert error["fields"]["target_date"] == F12_MESSAGE
+
+
+def f12_force_dates(db: Path, sid: int, started_on: str, target_date: str | None) -> None:
+    """규칙 전에 저장된 데이터를 흉내 내려고 별도 연결로 날짜를 직접 바꾼다."""
+    conn = sqlite3.connect(db)
+    try:
+        table = None
+        for name in user_tables(db):
+            cols = {r[1] for r in conn.execute(f'PRAGMA table_info("{name}")')}
+            if {"started_on", "target_date", "name"} <= cols:
+                table = name
+                break
+        assert table is not None, "주제 테이블을 찾지 못했다"
+        conn.execute(
+            f'UPDATE "{table}" SET started_on = ?, target_date = ? WHERE id = ?',
+            (started_on, target_date, sid),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def f12_legacy_subject(f12: F12Env, started_on="2026-10-26", target_date="2026-10-01") -> int:
+    sid = f12_create(f12.client, "2026-10-26", None, name="규칙 전 주제")["id"]
+    f12_force_dates(f12.db, sid, started_on, target_date)
+    return sid
+
+
+# --- POST ---
+
+
+def test_f12_post_target_one_day_before_start_is_422_with_message(auth_client: TestClient):
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26", "2026-10-25"))
+    f12_assert_target_error(response)
+
+
+def test_f12_post_422_does_not_create_subject(auth_client: TestClient):
+    before = auth_client.get("/api/subjects").json()["items"]
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26", "2026-10-25"))
+    assert response.status_code == 422
+    after = auth_client.get("/api/subjects").json()["items"]
+    assert after == before
+    assert after == []
+
+
+@pytest.mark.parametrize(
+    "started_on,target_date",
+    [
+        ("2026-10-01", "2026-09-30"),  # 달이 앞선다
+        ("2026-01-01", "2025-12-31"),  # 해가 앞선다
+        ("2026-10-26", "2026-10-09"),  # 숫자로는 큰 자리가 섞여도 날짜로 비교한다
+        ("2026-10-26", "2020-01-01"),
+    ],
+)
+def test_f12_post_earlier_target_is_422(auth_client: TestClient, started_on, target_date):
+    f12_assert_target_error(
+        auth_client.post("/api/subjects", json=f12_payload(started_on, target_date))
+    )
+
+
+def test_f12_post_same_day_is_201(auth_client: TestClient):
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26", "2026-10-26"))
+    assert response.status_code == 201, response.text
+    data = response.json()
+    assert data["started_on"] == "2026-10-26"
+    assert data["target_date"] == "2026-10-26"
+
+
+def test_f12_post_target_one_day_after_start_is_201(auth_client: TestClient):
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26", "2026-10-27"))
+    assert response.status_code == 201, response.text
+    assert response.json()["target_date"] == "2026-10-27"
+
+
+def test_f12_post_null_target_is_201(auth_client: TestClient):
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26", None))
+    assert response.status_code == 201, response.text
+    assert response.json()["target_date"] is None
+
+
+def test_f12_post_without_target_is_201(auth_client: TestClient):
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26"))
+    assert response.status_code == 201, response.text
+    assert response.json()["target_date"] is None
+
+
+def test_f12_post_past_dates_are_201(auth_client: TestClient):
+    # 목표일이 오늘보다 지난 날이어도 시작일보다 늦으면 허용한다.
+    response = auth_client.post("/api/subjects", json=f12_payload("2020-01-01", "2020-01-02"))
+    assert response.status_code == 201, response.text
+
+
+def test_f12_post_error_with_other_field_error_is_still_422(auth_client: TestClient):
+    response = auth_client.post(
+        "/api/subjects",
+        json={
+            "name": "",
+            "background": "",
+            "started_on": "2026-10-26",
+            "target_date": "2026-10-25",
+        },
+    )
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert "name" in error["fields"]
+
+
+def test_f12_post_invalid_target_format_is_422_on_target_date(auth_client: TestClient):
+    response = auth_client.post("/api/subjects", json=f12_payload("2026-10-26", "2026-13-40"))
+    assert response.status_code == 422
+    assert "target_date" in response.json()["error"]["fields"]
+
+
+def test_f12_post_missing_started_on_with_target_is_422_not_500(auth_client: TestClient):
+    response = auth_client.post(
+        "/api/subjects", json={"name": "시작일 없음", "target_date": "2026-10-25"}
+    )
+    assert response.status_code == 422
+    assert "started_on" in response.json()["error"]["fields"]
+
+
+def test_f12_post_requires_login(client: TestClient):
+    response = client.post("/api/subjects", json=f12_payload("2026-10-26", "2026-10-25"))
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+# --- PATCH: 병합 검사 ---
+
+
+def test_f12_patch_only_target_before_stored_start_is_422(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-25"})
+    f12_assert_target_error(response)
+
+
+def test_f12_patch_only_started_on_after_stored_target_is_422(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"started_on": "2026-12-07"})
+    f12_assert_target_error(response)
+
+
+def test_f12_patch_422_keeps_stored_values_when_only_target_sent(auth_client: TestClient):
+    created = f12_create(auth_client, "2026-10-26", "2026-12-06")
+    sid = created["id"]
+    before = f12_get(auth_client, sid)
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-25"})
+    assert response.status_code == 422
+    after = f12_get(auth_client, sid)
+    assert after == before
+    assert after["started_on"] == "2026-10-26"
+    assert after["target_date"] == "2026-12-06"
+
+
+def test_f12_patch_422_keeps_stored_values_when_only_started_on_sent(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    before = f12_get(auth_client, sid)
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"started_on": "2026-12-07"})
+    assert response.status_code == 422
+    assert f12_get(auth_client, sid) == before
+
+
+def test_f12_patch_422_keeps_other_fields_sent_together(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06", name="원래 이름")["id"]
+    before = f12_get(auth_client, sid)
+    response = auth_client.patch(
+        f"/api/subjects/{sid}",
+        json={"name": "바뀐 이름", "background": "바뀐 배경", "target_date": "2026-10-25"},
+    )
+    f12_assert_target_error(response)
+    after = f12_get(auth_client, sid)
+    assert after == before
+    assert after["name"] == "원래 이름"
+
+
+def test_f12_patch_both_sent_and_invalid_is_422_and_unchanged(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    before = f12_get(auth_client, sid)
+    response = auth_client.patch(
+        f"/api/subjects/{sid}",
+        json={"started_on": "2027-01-10", "target_date": "2027-01-09"},
+    )
+    f12_assert_target_error(response)
+    assert f12_get(auth_client, sid) == before
+
+
+def test_f12_patch_moving_both_together_is_200(auth_client: TestClient):
+    # 저장된 목표일(2026-12-06)보다 늦은 시작일이어도 목표일을 함께 옮기면 허용한다.
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}",
+        json={"started_on": "2027-01-10", "target_date": "2027-03-01"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["started_on"] == "2027-01-10"
+    assert response.json()["target_date"] == "2027-03-01"
+    stored = f12_get(auth_client, sid)
+    assert stored["started_on"] == "2027-01-10"
+    assert stored["target_date"] == "2027-03-01"
+
+
+def test_f12_patch_moving_both_earlier_together_is_200(auth_client: TestClient):
+    # 저장된 시작일(2026-10-26)보다 이른 목표일이어도 시작일을 함께 옮기면 허용한다.
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}",
+        json={"started_on": "2026-01-01", "target_date": "2026-02-01"},
+    )
+    assert response.status_code == 200, response.text
+    stored = f12_get(auth_client, sid)
+    assert stored["started_on"] == "2026-01-01"
+    assert stored["target_date"] == "2026-02-01"
+
+
+def test_f12_patch_target_same_day_as_stored_start_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-26"})
+    assert response.status_code == 200, response.text
+    assert response.json()["target_date"] == "2026-10-26"
+
+
+def test_f12_patch_started_on_same_day_as_stored_target_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"started_on": "2026-12-06"})
+    assert response.status_code == 200, response.text
+    assert response.json()["started_on"] == "2026-12-06"
+
+
+def test_f12_patch_both_same_day_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}",
+        json={"started_on": "2027-05-05", "target_date": "2027-05-05"},
+    )
+    assert response.status_code == 200, response.text
+
+
+def test_f12_patch_target_one_day_after_start_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-27"})
+    assert response.status_code == 200, response.text
+
+
+def test_f12_patch_started_on_earlier_with_stored_target_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"started_on": "2026-01-01"})
+    assert response.status_code == 200, response.text
+    assert response.json()["started_on"] == "2026-01-01"
+    assert response.json()["target_date"] == "2026-12-06"
+
+
+def test_f12_patch_target_null_clears_target_with_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": None})
+    assert response.status_code == 200, response.text
+    assert response.json()["target_date"] is None
+    assert f12_get(auth_client, sid)["target_date"] is None
+
+
+def test_f12_patch_target_null_with_started_on_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}", json={"started_on": "2030-01-01", "target_date": None}
+    )
+    assert response.status_code == 200, response.text
+    stored = f12_get(auth_client, sid)
+    assert stored["started_on"] == "2030-01-01"
+    assert stored["target_date"] is None
+
+
+@pytest.mark.parametrize("started_on", ["2020-01-01", "2026-10-26", "2099-12-31"])
+def test_f12_patch_started_on_when_no_target_is_200(auth_client: TestClient, started_on):
+    sid = f12_create(auth_client, "2026-10-26", None)["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"started_on": started_on})
+    assert response.status_code == 200, response.text
+    assert response.json()["started_on"] == started_on
+    assert response.json()["target_date"] is None
+
+
+def test_f12_patch_set_target_on_subject_without_target_checks_stored_start(
+    auth_client: TestClient,
+):
+    sid = f12_create(auth_client, "2026-10-26", None)["id"]
+    f12_assert_target_error(
+        auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-25"})
+    )
+    assert f12_get(auth_client, sid)["target_date"] is None
+    ok = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-26"})
+    assert ok.status_code == 200, ok.text
+
+
+def test_f12_patch_other_field_error_with_date_error_is_still_422(
+    auth_client: TestClient,
+):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06", name="원래 이름")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}", json={"name": "", "target_date": "2026-10-25"}
+    )
+    assert response.status_code == 422
+    error = response.json()["error"]
+    assert error["code"] == "validation_error"
+    assert "name" in error["fields"]
+    assert f12_get(auth_client, sid)["name"] == "원래 이름"
+
+
+def test_f12_patch_null_started_on_is_still_422(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"started_on": None})
+    assert response.status_code == 422
+    assert "started_on" in response.json()["error"]["fields"]
+
+
+def test_f12_patch_invalid_target_format_is_422_on_target_date(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "내일"})
+    assert response.status_code == 422
+    assert "target_date" in response.json()["error"]["fields"]
+
+
+def test_f12_patch_missing_subject_is_404(auth_client: TestClient):
+    valid = auth_client.patch("/api/subjects/99999", json={"target_date": "2026-12-06"})
+    assert valid.status_code == 404
+    assert valid.json()["error"]["code"] == "not_found"
+    # 합칠 저장값이 없으면 날짜 규칙 오류가 아니라 404다.
+    only_target = auth_client.patch("/api/subjects/99999", json={"target_date": "2000-01-01"})
+    assert only_target.status_code == 404
+    assert only_target.json()["error"]["code"] == "not_found"
+
+
+def test_f12_patch_requires_login(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    auth_client.cookies.clear()
+    response = auth_client.patch(f"/api/subjects/{sid}", json={"target_date": "2026-10-25"})
+    assert response.status_code == 401
+    assert response.json()["error"]["code"] == "unauthorized"
+
+
+def test_f12_patch_unsupported_media_type_is_still_415(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}",
+        content='{"target_date": "2026-10-25"}',
+        headers={"Content-Type": "text/plain"},
+    )
+    assert response.status_code == 415
+
+
+# --- 규칙 전 데이터 읽기·부분 수정 ---
+
+
+def test_f12_legacy_subject_is_readable_by_get(f12: F12Env):
+    sid = f12_legacy_subject(f12)
+    data = f12_get(f12.client, sid)
+    assert data["started_on"] == "2026-10-26"
+    assert data["target_date"] == "2026-10-01"
+
+
+def test_f12_legacy_subject_is_readable_in_list(f12: F12Env):
+    sid = f12_legacy_subject(f12)
+    response = f12.client.get("/api/subjects")
+    assert response.status_code == 200, response.text
+    items = {item["id"]: item for item in response.json()["items"]}
+    assert items[sid]["started_on"] == "2026-10-26"
+    assert items[sid]["target_date"] == "2026-10-01"
+
+
+def test_f12_legacy_subject_is_exported(f12: F12Env):
+    sid = f12_legacy_subject(f12)
+    response = f12.client.get(f"/api/subjects/{sid}/export")
+    assert response.status_code == 200, response.text[:300]
+    assert "text/markdown" in response.headers["content-type"]
+
+
+def test_f12_legacy_subject_sessions_and_notes_still_work(f12: F12Env):
+    sid = f12_legacy_subject(f12)
+    assert f12.client.get(f"/api/subjects/{sid}/sessions").status_code == 200
+    assert f12.client.get(f"/api/subjects/{sid}/notes").status_code == 200
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        {"name": "이름만 바꿈"},
+        {"background": "배경만 바꿈"},
+        {"name": "둘 다", "background": "같이 바꿈"},
+        {},
+    ],
+    ids=["name", "background", "name+background", "empty"],
+)
+def test_f12_patch_without_dates_skips_check_on_legacy_subject(f12: F12Env, payload):
+    sid = f12_legacy_subject(f12)
+    response = f12.client.patch(f"/api/subjects/{sid}", json=payload)
+    assert response.status_code == 200, response.text
+    data = response.json()
+    assert data["started_on"] == "2026-10-26"
+    assert data["target_date"] == "2026-10-01"
+    stored = f12_get(f12.client, sid)
+    assert stored["started_on"] == "2026-10-26"
+    assert stored["target_date"] == "2026-10-01"
+    for key, value in payload.items():
+        assert stored[key] == value
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [{"started_on": "2026-10-27"}, {"started_on": "2026-10-26"}, {"target_date": "2026-10-02"},
+     {"target_date": "2026-10-25"}],
+    ids=["start-later", "start-same-as-stored", "target-still-early", "target-just-before-start"],
+)
+def test_f12_patch_with_one_date_checks_merged_result_on_legacy_subject(f12: F12Env, payload):
+    sid = f12_legacy_subject(f12)  # 시작일 2026-10-26, 목표일 2026-10-01
+    response = f12.client.patch(f"/api/subjects/{sid}", json=payload)
+    f12_assert_target_error(response)
+    stored = f12_get(f12.client, sid)
+    assert stored["started_on"] == "2026-10-26"
+    assert stored["target_date"] == "2026-10-01"
+
+
+@pytest.mark.parametrize(
+    "payload,expected_started,expected_target",
+    [
+        ({"started_on": "2026-09-01"}, "2026-09-01", "2026-10-01"),
+        ({"started_on": "2026-10-01"}, "2026-10-01", "2026-10-01"),
+        ({"target_date": "2026-10-26"}, "2026-10-26", "2026-10-26"),
+        ({"target_date": "2026-11-30"}, "2026-10-26", "2026-11-30"),
+        ({"target_date": None}, "2026-10-26", None),
+        ({"started_on": "2026-12-01", "target_date": "2026-12-02"}, "2026-12-01", "2026-12-02"),
+    ],
+    ids=[
+        "start-before-target",
+        "start-same-as-target",
+        "target-same-as-start",
+        "target-after-start",
+        "target-cleared",
+        "both-moved",
+    ],
+)
+def test_f12_patch_that_fixes_legacy_subject_is_200(
+    f12: F12Env, payload, expected_started, expected_target
+):
+    sid = f12_legacy_subject(f12)
+    response = f12.client.patch(f"/api/subjects/{sid}", json=payload)
+    assert response.status_code == 200, response.text
+    stored = f12_get(f12.client, sid)
+    assert stored["started_on"] == expected_started
+    assert stored["target_date"] == expected_target
+
+
+def test_f12_patch_name_and_bad_target_on_legacy_subject_is_422_and_unchanged(f12: F12Env):
+    sid = f12_legacy_subject(f12)
+    response = f12.client.patch(
+        f"/api/subjects/{sid}", json={"name": "바뀌면 안 됨", "target_date": "2026-10-02"}
+    )
+    f12_assert_target_error(response)
+    assert f12_get(f12.client, sid)["name"] == "규칙 전 주제"
+
+
+# --- 제한하지 않는 것 ---
+
+
+def test_f12_study_session_dates_are_not_limited(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    for studied_on in ["2099-01-01", "2026-10-25", "2000-01-01", "2026-12-07"]:
+        response = auth_client.post(
+            f"/api/subjects/{sid}/sessions", json={"studied_on": studied_on, "minutes": 30}
+        )
+        assert response.status_code == 201, (studied_on, response.text)
+
+
+def test_f12_study_session_on_legacy_subject_before_start_is_201(f12: F12Env):
+    sid = f12_legacy_subject(f12)
+    response = f12.client.post(
+        f"/api/subjects/{sid}/sessions", json={"studied_on": "2026-09-01", "minutes": 60}
+    )
+    assert response.status_code == 201, response.text
+
+
+def test_f12_same_day_total_over_1440_minutes_is_201(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    for minutes in (1440, 1440, 1):
+        response = auth_client.post(
+            f"/api/subjects/{sid}/sessions", json={"studied_on": "2026-10-30", "minutes": minutes}
+        )
+        assert response.status_code == 201, response.text
+    listed = auth_client.get(f"/api/subjects/{sid}/sessions")
+    assert listed.status_code == 200
+    assert listed.json()["total_minutes"] == 2881
+
+
+@pytest.mark.parametrize(
+    "started_on,target_date",
+    [
+        ("0001-01-01", "0001-01-01"),
+        ("0001-01-01", "9999-12-31"),
+        ("9999-12-31", "9999-12-31"),
+        ("9999-12-30", "9999-12-31"),
+        ("0001-01-01", None),
+        ("9999-12-31", None),
+    ],
+)
+def test_f12_extreme_years_are_stored(auth_client: TestClient, started_on, target_date):
+    response = auth_client.post("/api/subjects", json=f12_payload(started_on, target_date))
+    assert response.status_code == 201, response.text
+    sid = response.json()["id"]
+    stored = f12_get(auth_client, sid)
+    assert stored["started_on"] == started_on
+    assert stored["target_date"] == target_date
+    assert auth_client.get("/api/subjects").status_code == 200
+
+
+def test_f12_extreme_years_still_checked_for_order(auth_client: TestClient):
+    f12_assert_target_error(
+        auth_client.post("/api/subjects", json=f12_payload("9999-12-31", "9999-12-30"))
+    )
+    f12_assert_target_error(
+        auth_client.post("/api/subjects", json=f12_payload("0001-01-02", "0001-01-01"))
+    )
+
+
+def test_f12_patch_to_extreme_years_is_200(auth_client: TestClient):
+    sid = f12_create(auth_client, "2026-10-26", "2026-12-06")["id"]
+    response = auth_client.patch(
+        f"/api/subjects/{sid}", json={"started_on": "0001-01-01", "target_date": "9999-12-31"}
+    )
+    assert response.status_code == 200, response.text
+    stored = f12_get(auth_client, sid)
+    assert stored["started_on"] == "0001-01-01"
+    assert stored["target_date"] == "9999-12-31"

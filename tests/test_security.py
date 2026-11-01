@@ -1457,7 +1457,11 @@ def test_sec5_잘못된_날짜는_422(world, resource, field, value, method):
 @pytest.mark.parametrize("value", ["0001-01-01", "9999-12-31"])
 @pytest.mark.parametrize(("resource", "field"), DATE_FIELDS)
 def test_sec5_경계_날짜는_저장된다(world, resource, field, value, method):
-    response = send_fields(world, resource, method, {field: value})
+    fields = {field: value}
+    if (resource, field, value) == ("subject", "target_date", "0001-01-01"):
+        # F12: 목표일은 시작일보다 빠를 수 없으므로 시작일도 같은 날로 맞춘다(같은 날은 허용).
+        fields["started_on"] = value
+    response = send_fields(world, resource, method, fields)
     assert response.status_code in (200, 201), response.text[:200]
     assert response.json()[field] == value
     if resource == "subject":

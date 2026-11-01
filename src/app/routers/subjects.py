@@ -10,6 +10,7 @@ from app.auth import require_session
 from app.clock import today_kst
 from app.db import get_db
 from app.deps import IdPath, get_subject_or_404
+from app.errors import TARGET_BEFORE_START_MESSAGE, APIError
 from app.models import Note, StudySession, Subject
 from app.schemas import SubjectCreate, SubjectList, SubjectOut, SubjectUpdate
 
@@ -64,6 +65,17 @@ def _stats(db: Session, subject_id: int | None = None) -> dict[int, dict[str, in
     return stats
 
 
+def _check_date_order(started_on: date, target_date: date | None) -> None:
+    """F12: 목표일이 시작일보다 빠르면 422 fields.target_date. 목표일이 없거나 같은 날이면 통과."""
+    if target_date is not None and target_date < started_on:
+        raise APIError(
+            422,
+            "validation_error",
+            "입력값을 확인하세요",
+            fields={"target_date": TARGET_BEFORE_START_MESSAGE},
+        )
+
+
 def _to_out(subject: Subject, stats: dict[int, dict[str, int]]) -> SubjectOut:
     return SubjectOut.model_validate(subject).model_copy(update=stats.get(subject.id, {}))
 
@@ -79,6 +91,7 @@ def list_subjects(db: Session = Depends(get_db)) -> SubjectList:
 @router.post("", response_model=SubjectOut, status_code=status.HTTP_201_CREATED)
 def create_subject(payload: SubjectCreate, db: Session = Depends(get_db)) -> SubjectOut:
     # 201 Subject+계산필드(모두 0) / 422 validation_error
+    _check_date_order(payload.started_on, payload.target_date)
     subject = Subject(
         name=payload.name,
         background=payload.background,
@@ -103,7 +116,14 @@ def update_subject(
 ) -> SubjectOut:
     # 보낸 필드만 수정. 200 / 404 / 422
     subject = get_subject_or_404(db, subject_id)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    if "started_on" in changes or "target_date" in changes:
+        # F12: 보낸 값과 저장된 값을 합쳐 검사한다. 둘 다 안 보내면 이 규칙 전의 값도 그대로 둔다.
+        _check_date_order(
+            changes.get("started_on", subject.started_on),
+            changes.get("target_date", subject.target_date),
+        )
+    for field, value in changes.items():
         setattr(subject, field, value)
     db.commit()
     return _to_out(subject, _stats(db, subject_id))

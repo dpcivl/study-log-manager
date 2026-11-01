@@ -98,6 +98,9 @@ NOT_FOUND_MESSAGES: dict[str, str] = {
 }
 
 
+# F12: 목표일이 시작일보다 빠를 때 fields.target_date 문구
+TARGET_BEFORE_START_MESSAGE = "목표일은 시작일보다 빠를 수 없습니다"
+
 CONFLICT_MESSAGE = "다른 곳에서 먼저 수정된 노트입니다"
 
 

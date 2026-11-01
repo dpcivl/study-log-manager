@@ -86,9 +86,9 @@ S6(F11): 경로가 `/api/`나 `/static/`으로 시작하지 않는 GET 요청에
 | 기능 ID | 메서드 | 주소 | 요청 | 성공 응답 | 오류 응답 |
 |---|---|---|---|---|---|
 | F1 | GET | /api/subjects | 없음 | 200 `{items:[Subject+계산필드]}` 생성 최신순 | 401 |
-| F1 | POST | /api/subjects | `{name, background?, started_on, target_date?}` | 201 Subject+계산필드 | 422 validation_error |
+| F1, F12 | POST | /api/subjects | `{name, background?, started_on, target_date?}` | 201 Subject+계산필드 | 422 validation_error |
 | F1 | GET | /api/subjects/{id} | 없음 | 200 Subject+계산필드 | 404 not_found |
-| F1 | PATCH | /api/subjects/{id} | `{name?, background?, started_on?, target_date?}` 보낸 필드만 수정 | 200 Subject+계산필드 | 404 / 422 |
+| F1, F12 | PATCH | /api/subjects/{id} | `{name?, background?, started_on?, target_date?}` 보낸 필드만 수정 | 200 Subject+계산필드 | 404 / 422 |
 
 ### F1 GET /api/subjects
 ```json
@@ -123,6 +123,16 @@ S6(F11): 경로가 `/api/`나 `/static/`으로 시작하지 않는 GET 요청에
 ```json
 { "error": { "code": "validation_error", "message": "입력값을 확인하세요", "fields": { "name": "이름은 1~100자여야 합니다" } } }
 ```
+
+오류 422 (F12, `target_date`가 `started_on`보다 빠를 때)
+```json
+{ "error": { "code": "validation_error", "message": "입력값을 확인하세요", "fields": { "target_date": "목표일은 시작일보다 빠를 수 없습니다" } } }
+```
+F12 규칙:
+- `target_date`가 null이면 검사하지 않는다. 같은 날은 허용한다.
+- PATCH에서 `started_on`이나 `target_date`를 하나라도 보내면, 보낸 값과 저장된 값을 합친 결과로 검사한다. 둘 다 보내지 않으면 검사하지 않는다.
+- 이 규칙 전에 저장된 값은 그대로 읽을 수 있다.
+- 공부 기록의 미래 날짜, 시작일 이전 날짜, 같은 날 합계 1440분 초과, 연도 범위는 제한하지 않는다.
 
 ### F1 GET /api/subjects/{id}, PATCH /api/subjects/{id}
 PATCH 요청 예
